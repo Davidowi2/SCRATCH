@@ -2,9 +2,6 @@
 
 import { useState, useEffect } from 'react';
 
-const API_URL = process.env.API_URL || 'http://localhost:5000';
-const API_KEY = process.env.API_KEY || 'your-secret-api-key-change-this';
-
 interface BotStatus {
   bot_running: boolean;
   session_start: string | null;
@@ -54,20 +51,20 @@ export default function Home() {
 
   const fetchData = async () => {
     try {
-      // Fetch status
-      const statusRes = await fetch(`${API_URL}/status?api_key=${API_KEY}`);
+      // Fetch status via Next.js proxy
+      const statusRes = await fetch('/api/proxy?endpoint=status');
       if (!statusRes.ok) throw new Error('Failed to fetch status');
       const statusData = await statusRes.json();
       setStatus(statusData);
 
-      // Fetch recent trades
-      const tradesRes = await fetch(`${API_URL}/trades?limit=10&api_key=${API_KEY}`);
+      // Fetch recent trades via Next.js proxy
+      const tradesRes = await fetch('/api/proxy?endpoint=trades&limit=10');
       if (!tradesRes.ok) throw new Error('Failed to fetch trades');
       const tradesData = await tradesRes.json();
       setTrades(tradesData.trades || []);
 
-      // Fetch metrics
-      const metricsRes = await fetch(`${API_URL}/metrics?api_key=${API_KEY}`);
+      // Fetch metrics via Next.js proxy
+      const metricsRes = await fetch('/api/proxy?endpoint=metrics');
       if (!metricsRes.ok) throw new Error('Failed to fetch metrics');
       const metricsData = await metricsRes.json();
       setMetrics(metricsData.metrics);

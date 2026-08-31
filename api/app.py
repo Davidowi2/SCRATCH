@@ -12,6 +12,11 @@ from flask_cors import CORS
 from datetime import datetime
 import logging
 
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
+
 # Add parent directory to path to import database manager
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

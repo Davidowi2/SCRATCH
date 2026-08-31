@@ -84,13 +84,13 @@ class ScalpingBot:
         self.last_candle_time: Optional[datetime] = None
         
         # Configuration
-        self.position_size: float = 0.06  # Exactly 0.06 lots
+        self.position_size: float = 0.02  # Reduced to 0.02 for testing
         self.stop_loss_pips: int = 5
         self.take_profit_pips: int = 10
         self.max_spread_pips: float = 2.0
         self.stalling_time_seconds: int = 5
         self.stalling_min_profit_pips: float = 2.0
-        self.max_hold_time_seconds: int = 15
+        self.max_hold_time_seconds: int = 60  # Increased to 60s
         self.pip_value: float = 0.0001  # For EURUSD
         
         # API settings
@@ -102,6 +102,7 @@ class ScalpingBot:
         # State flags
         self.inside_range_after_gap: bool = False
         self.gap_direction: Optional[str] = None  # "UP" or "DOWN"
+        self.trade_taken_this_candle: bool = False  # 1 trade per candle guard
         
         logger.info("SCRATCH Bot initialized")
         logger.info(f"Database initialized at: {self.db.db_path}")
@@ -115,20 +116,28 @@ class ScalpingBot:
         """
         username = os.getenv('TL_USERNAME')
         password = os.getenv('TL_PASSWORD')
-        server = os.getenv('TL_SERVER')
+        environment = os.getenv('TL_ENVIRONMENT', os.getenv('TL_SERVER', 'https://demo.tradelocker.com'))
+        # If TL_SERVER was set to a URL, default server name to 'Demo', otherwise use TL_SERVER
+        server_name = os.getenv('TL_SERVER_NAME', 'Demo' if environment.startswith('http') else os.getenv('TL_SERVER', 'Demo'))
+        if environment.startswith('http') and os.getenv('TL_SERVER') and not os.getenv('TL_SERVER').startswith('http'):
+            server_name = os.getenv('TL_SERVER')
         
-        if not all([username, password, server]):
-            logger.error("Missing required environment variables: TL_USERNAME, TL_PASSWORD, TL_SERVER")
+        acc_num = int(os.getenv('TL_ACC_NUM', 0)) if os.getenv('TL_ACC_NUM') else 0
+
+        if not all([username, password]):
+            logger.error("Missing required environment variables: TL_USERNAME, TL_PASSWORD")
             return False
         
-        logger.info(f"Attempting to connect to TradeLocker at {server}")
+        logger.info(f"Attempting to connect to TradeLocker at {environment} (Server: {server_name})")
         
         for attempt in range(1, self.api_retry_attempts + 1):
             try:
                 self.tl = TLAPI(
-                    environment=server,
+                    environment=environment,
                     username=username,
-                    password=password
+                    password=password,
+                    server=server_name,
+                    acc_num=acc_num
                 )
                 logger.info(f"Successfully connected to TradeLocker (attempt {attempt})")
                 return True
@@ -175,22 +184,22 @@ class ScalpingBot:
         try:
             time.sleep(self.api_call_delay)
             
-            # Fetch recent 5-minute candles (get at least 2 candles)
+            # Fetch recent 5-minute candles
             candles = self.tl.get_price_history(
                 instrument_id=self.instrument_id,
                 resolution="5m",
-                lookback_period=10  # Get last 10 candles to be safe
+                lookback_period="1D"
             )
             
-            if not candles or len(candles) < 2:
+            if candles is None or len(candles) < 2:
                 logger.warning("Insufficient candle data received")
                 return None, None
             
-            # Get the previous candle (second to last)
-            previous_candle = candles[-2]
+            # Get the previous candle (second to last row in DataFrame)
+            previous_candle = candles.iloc[-2]
             
-            high = float(previous_candle['high'])
-            low = float(previous_candle['low'])
+            high = float(previous_candle['h'])
+            low = float(previous_candle['l'])
             
             logger.info(f"Previous candle: High={high:.5f}, Low={low:.5f}")
             
@@ -209,13 +218,11 @@ class ScalpingBot:
         try:
             time.sleep(self.api_call_delay)
             
-            # Get current quote
-            quote = self.tl.get_quote(instrument_id=self.instrument_id)
+            bid = self.tl.get_latest_bid_price(self.instrument_id)
+            ask = self.tl.get_latest_asking_price(self.instrument_id)
             
-            if quote:
-                bid = float(quote.get('bid', 0))
-                ask = float(quote.get('ask', 0))
-                return {"bid": bid, "ask": ask}
+            if bid is not None and ask is not None:
+                return {"bid": float(bid), "ask": float(ask)}
             else:
                 logger.warning("No quote data received")
                 return None
@@ -292,17 +299,20 @@ class ScalpingBot:
             time.sleep(self.api_call_delay)
             
             # Place market order
-            order = self.tl.create_market_order(
+            order_id = self.tl.create_order(
                 instrument_id=self.instrument_id,
                 quantity=self.position_size,
                 side="buy",
+                type_="market",
                 stop_loss=stop_loss,
-                take_profit=take_profit
+                stop_loss_type="absolute",
+                take_profit=take_profit,
+                take_profit_type="absolute"
             )
             
-            if order:
+            if order_id:
                 self.position_open = True
-                self.current_position = order
+                self.current_position = {"id": order_id, "orderId": order_id}
                 self.entry_time = time.time()
                 self.entry_price = entry_price
                 self.position_type = "BUY"
@@ -317,7 +327,7 @@ class ScalpingBot:
                     take_profit=take_profit
                 )
                 
-                logger.info(f"BUY ORDER PLACED: Entry={entry_price:.5f}, SL={stop_loss:.5f}, TP={take_profit:.5f}")
+                logger.info(f"BUY ORDER PLACED (Order ID: {order_id}): Entry={entry_price:.5f}, SL={stop_loss:.5f}, TP={take_profit:.5f}")
                 logger.info(f"Trade ID: {self.current_trade_id}")
                 return True
             else:
@@ -347,17 +357,20 @@ class ScalpingBot:
             time.sleep(self.api_call_delay)
             
             # Place market order
-            order = self.tl.create_market_order(
+            order_id = self.tl.create_order(
                 instrument_id=self.instrument_id,
                 quantity=self.position_size,
                 side="sell",
+                type_="market",
                 stop_loss=stop_loss,
-                take_profit=take_profit
+                stop_loss_type="absolute",
+                take_profit=take_profit,
+                take_profit_type="absolute"
             )
             
-            if order:
+            if order_id:
                 self.position_open = True
-                self.current_position = order
+                self.current_position = {"id": order_id, "orderId": order_id}
                 self.entry_time = time.time()
                 self.entry_price = entry_price
                 self.position_type = "SELL"
@@ -372,7 +385,7 @@ class ScalpingBot:
                     take_profit=take_profit
                 )
                 
-                logger.info(f"SELL ORDER PLACED: Entry={entry_price:.5f}, SL={stop_loss:.5f}, TP={take_profit:.5f}")
+                logger.info(f"SELL ORDER PLACED (Order ID: {order_id}): Entry={entry_price:.5f}, SL={stop_loss:.5f}, TP={take_profit:.5f}")
                 logger.info(f"Trade ID: {self.current_trade_id}")
                 return True
             else:
@@ -413,9 +426,16 @@ class ScalpingBot:
                 profit_usd = None
             
             # Close the position
-            position_id = self.current_position.get('id') or self.current_position.get('orderId')
+            order_id = self.current_position.get('id') or self.current_position.get('orderId')
             
-            result = self.tl.close_position(position_id)
+            if order_id:
+                try:
+                    result = self.tl.close_position(order_id=int(order_id))
+                except Exception as ex:
+                    logger.warning(f"Close position with order_id failed: {ex}, attempting close_all_positions")
+                    result = self.tl.close_all_positions()
+            else:
+                result = self.tl.close_all_positions()
             
             # Calculate hold time
             hold_time = time.time() - self.entry_time if self.entry_time else 0
@@ -491,13 +511,13 @@ class ScalpingBot:
         if profit_pips >= self.take_profit_pips:
             return "TAKE-PROFIT HIT"
         
-        # PRIORITY 3: Check Stalling Exit (5 seconds, <2 pips profit)
-        if elapsed_time >= self.stalling_time_seconds and profit_pips < self.stalling_min_profit_pips:
-            return f"STALLING EXIT (5s elapsed, only {profit_pips:.2f} pips profit)"
+        # PRIORITY 3: Stalling Exit - REMOVED (caused all trades to lose on spread)
+        # if elapsed_time >= self.stalling_time_seconds and profit_pips < self.stalling_min_profit_pips:
+        #     return f"STALLING EXIT (5s elapsed, only {profit_pips:.2f} pips profit)"
         
-        # PRIORITY 4: Check Maximum Hold Time (15 seconds)
+        # PRIORITY 4: Check Maximum Hold Time (60 seconds)
         if elapsed_time >= self.max_hold_time_seconds:
-            return f"MAX HOLD TIME (15s elapsed, {profit_pips:.2f} pips profit)"
+            return f"MAX HOLD TIME (60s elapsed, {profit_pips:.2f} pips profit)"
         
         return None
     
@@ -608,7 +628,8 @@ class ScalpingBot:
         """
         Handle the start of a new candle: update reference high/low.
         """
-        logger.info("Processing new candle...")
+        logger.info("NEW CANDLE DETECTED - Resetting trade flag")
+        self.trade_taken_this_candle = False
         
         # Get the previous candle's high and low
         high, low = self.get_last_candle()
@@ -643,6 +664,25 @@ class ScalpingBot:
         else:
             logger.error("Failed to get previous candle data")
     
+    def update_account_snapshot(self) -> None:
+        """Fetch and record current account balance and equity."""
+        try:
+            acc = self.tl.get_account_state()
+            if acc:
+                balance = float(acc.get('balance', 0.0))
+                equity = float(acc.get('projectedBalance', balance))
+                margin_used = float(acc.get('initialMarginReq', 0.0))
+                margin_free = float(acc.get('availableFunds', balance))
+                self.db.save_account_snapshot(
+                    timestamp=datetime.now(),
+                    balance=balance,
+                    equity=equity,
+                    margin_used=margin_used,
+                    margin_free=margin_free
+                )
+        except Exception as e:
+            logger.debug(f"Error updating account snapshot: {e}")
+
     def run(self) -> None:
         """
         Main bot loop.
@@ -661,7 +701,8 @@ class ScalpingBot:
             logger.error("Failed to get instrument. Exiting.")
             return
         
-        # Initialize with first candle
+        # Initialize account snapshot and first candle
+        self.update_account_snapshot()
         logger.info("Initializing with current candle data...")
         self.detect_new_candle()
         self.handle_new_candle()
@@ -673,6 +714,7 @@ class ScalpingBot:
         consecutive_errors = 0
         max_consecutive_errors = 3
         heartbeat_counter = 0
+        account_snapshot_counter = 0
         
         # Main loop
         while True:
@@ -683,6 +725,12 @@ class ScalpingBot:
                     self.db.update_heartbeat()
                     heartbeat_counter = 0
                 
+                # Update account snapshot every 60 iterations (~30 seconds)
+                account_snapshot_counter += 1
+                if account_snapshot_counter >= 60:
+                    self.update_account_snapshot()
+                    account_snapshot_counter = 0
+                
                 # Check for new candle
                 if self.detect_new_candle() and not self.position_open:
                     self.handle_new_candle()
@@ -690,6 +738,11 @@ class ScalpingBot:
                 # If position is open, monitor it
                 if self.position_open:
                     self.monitor_position()
+                    continue
+                
+                # 1 Trade Per Candle Guard
+                if self.trade_taken_this_candle:
+                    time.sleep(0.5)
                     continue
                 
                 # Check entry conditions
@@ -712,15 +765,18 @@ class ScalpingBot:
                     # Enter trade
                     if signal == "BUY":
                         entry_price = price_data['ask']
+                        self.trade_taken_this_candle = True
                         success = self.enter_buy(entry_price)
                     else:  # SELL
                         entry_price = price_data['bid']
+                        self.trade_taken_this_candle = True
                         success = self.enter_sell(entry_price)
                     
                     if not success:
                         logger.error("Failed to enter trade, waiting for next candle")
-                        # Wait for next candle after failed entry
-                        time.sleep(60)
+                        # Reset flag if entry failed
+                        self.trade_taken_this_candle = False
+                        time.sleep(5)
                 
                 # Reset error counter on successful iteration
                 consecutive_errors = 0
