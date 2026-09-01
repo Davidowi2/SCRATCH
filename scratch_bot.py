@@ -395,13 +395,15 @@ class ScalpingBot:
             logger.error(f"Error placing SELL order: {e}")
             return False
     
-    def close_position(self, reason: str) -> bool:
+    def close_position(self, reason: str, price_data: Optional[Dict[str, float]] = None) -> bool:
         """
         Close the current open position.
-        
+
         Args:
             reason: Reason for closing the position
-        
+            price_data: Pre-fetched price dict {bid, ask} from the current monitoring cycle.
+                        If provided, avoids a redundant API call for P&L calculation.
+
         Returns:
             bool: True if position closed successfully, False otherwise
         """
@@ -409,22 +411,23 @@ class ScalpingBot:
             if not self.position_open or not self.current_position:
                 logger.warning("No position to close")
                 return False
-            
+
             time.sleep(self.api_call_delay)
-            
-            # Get current price for P&L calculation
-            price_data = self.get_current_price()
+
+            # Use pre-fetched price if available, otherwise fetch fresh
+            if price_data is None:
+                price_data = self.get_current_price()
             if price_data:
                 exit_price = price_data['bid'] if self.position_type == "BUY" else price_data['ask']
                 profit_pips = self.calculate_profit_pips(self.entry_price, exit_price, self.position_type)
-                
-                # Calculate profit in USD (approximate: $10 per pip for 0.06 lots)
+
+                # Calculate profit in USD (approximate: $10 per pip for 0.01 lots)
                 profit_usd = profit_pips * 10 * self.position_size / 0.01
             else:
                 exit_price = None
                 profit_pips = None
                 profit_usd = None
-            
+
             # Close the position
             order_id = self.current_position.get('id') or self.current_position.get('orderId')
             
@@ -483,60 +486,77 @@ class ScalpingBot:
             self.position_type = None
             return False
     
-    def check_exit_conditions(self) -> Optional[str]:
+    def check_exit_conditions(self, price_data: Optional[Dict[str, float]] = None) -> Optional[str]:
         """
         Check all exit conditions in priority order.
-        
+
+        Args:
+            price_data: Pre-fetched price dict {bid, ask}. If None, fetches internally.
+
         Returns:
             Optional[str]: Exit reason if condition met, None otherwise
         """
         if not self.position_open or not self.entry_time:
             return None
-        
-        # Get current price
-        price_data = self.get_current_price()
+
+        if price_data is None:
+            price_data = self.get_current_price()
         if not price_data:
             logger.warning("Could not fetch price for exit check")
             return None
-        
+
         current_price = price_data['bid'] if self.position_type == "BUY" else price_data['ask']
         profit_pips = self.calculate_profit_pips(self.entry_price, current_price, self.position_type)
         elapsed_time = time.time() - self.entry_time
-        
-        # PRIORITY 1: Check Stop-Loss (5 pips loss)
+
+        # PRIORITY 1: Stop-Loss (5 pips loss)
         if profit_pips <= -self.stop_loss_pips:
             return "STOP-LOSS HIT"
-        
-        # PRIORITY 2: Check Take-Profit (10 pips profit)
+
+        # PRIORITY 2: Take-Profit (10 pips profit)
         if profit_pips >= self.take_profit_pips:
             return "TAKE-PROFIT HIT"
-        
-        # PRIORITY 3: Stalling Exit - REMOVED (caused all trades to lose on spread)
-        # if elapsed_time >= self.stalling_time_seconds and profit_pips < self.stalling_min_profit_pips:
-        #     return f"STALLING EXIT (5s elapsed, only {profit_pips:.2f} pips profit)"
-        
-        # PRIORITY 4: Check Maximum Hold Time (60 seconds)
+
+        # PRIORITY 3: Maximum Hold Time (60 seconds)
         if elapsed_time >= self.max_hold_time_seconds:
             return f"MAX HOLD TIME (60s elapsed, {profit_pips:.2f} pips profit)"
-        
+
         return None
     
     def monitor_position(self) -> None:
         """
         Monitor the open position and check exit conditions continuously.
+        Fetches price ONCE per cycle and passes it to both check_exit_conditions
+        and close_position to eliminate redundant ~1.5s API round-trips.
         """
+        cycle = 0
         while self.position_open:
             try:
-                exit_reason = self.check_exit_conditions()
-                
+                cycle_start = time.time()
+
+                # Single price fetch per monitoring cycle
+                price_data = self.get_current_price()
+
+                exit_reason = self.check_exit_conditions(price_data=price_data)
+
                 if exit_reason:
-                    self.close_position(exit_reason)
+                    self.close_position(exit_reason, price_data=price_data)
                     break
-                
+
+                cycle_elapsed = time.time() - cycle_start
+                if cycle < 10:
+                    elapsed_trade = time.time() - self.entry_time if self.entry_time else 0
+                    bid = price_data['bid'] if price_data else 0
+                    profit_pips = self.calculate_profit_pips(self.entry_price, bid, self.position_type) if price_data and self.entry_price else 0
+                    logger.info(f"[CYCLE {cycle+1:02d}] interval={cycle_elapsed:.2f}s | trade_age={elapsed_trade:.1f}s | pips={profit_pips:+.4f}")
+
+                cycle += 1
                 time.sleep(self.position_check_interval)
+
             except Exception as e:
                 logger.error(f"Error monitoring position: {e}")
                 time.sleep(1)
+
     
     def check_entry_conditions(self) -> Optional[str]:
         """
