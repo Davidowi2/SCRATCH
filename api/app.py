@@ -44,7 +44,9 @@ logger = logging.getLogger(__name__)
 db = DatabaseManager()
 
 # API Key for authentication (load from environment)
-API_KEY = os.getenv('API_KEY', 'your-secret-api-key-change-this')
+API_KEY = os.getenv('API_KEY')
+if not API_KEY:
+    raise RuntimeError("API_KEY environment variable is required. Set it in .env")
 
 
 def require_api_key(f):

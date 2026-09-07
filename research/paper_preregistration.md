@@ -1,6 +1,6 @@
 # Paper Trading Preregistration — H-001
 
-**Status:** FROZEN at commit `PENDING`
+**Status:** FROZEN at commit `f7110f6914bfc94a308e601382866f16494a7a0b`
 **Created:** 2026-09-07
 **Owner:** David Owi
 
@@ -74,6 +74,6 @@
 ## 7. Security
 
 - `.env` in `.gitignore` ✓
-- Default API key fallback to be removed (env-only)
+- Default API key fallback: removed (env-only, raises if missing) ✓
 - No secrets in chat/commits/build output
 - Tunnel stays off
