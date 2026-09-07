@@ -294,6 +294,15 @@ def append_kill_log(metrics: dict, data_range: str, verdict: str, note: str) -> 
            f"{STRATEGY_FAMILY},\"{PARAM_DESC}\",\"{data_range}\",\"{WHY}\","
            f"{metrics['n']},{metrics['win_rate']:.3f},{pf_s},{metrics['expectancy_pips']:.2f},"
            f"{metrics['max_dd_pips']:.1f},{verdict},\"{note}\"")
+    
+    # Guard: don't append if an identical row already exists (idempotent append)
+    if os.path.exists(path):
+        with open(path, "r", newline="") as f:
+            existing = f.read()
+        if row in existing:
+            print(f"  (kill log row already exists — skipping duplicate)")
+            return
+    
     new = not os.path.exists(path)
     with open(path, "a", newline="") as f:
         if new:
