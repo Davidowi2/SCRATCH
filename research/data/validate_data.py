@@ -196,9 +196,13 @@ def audit(log_path: str, raw_dir: str, dataset_out: str) -> str:
             span_date_str = (prev["time"] + timedelta(days=1)).strftime("%Y-%m-%d")
             if span_date_str in MARKET_HOLIDAYS:
                 continue
-            # Ignore same-day gaps (caused by stripping flat filler on partial days)
+            # Ignore same-day gaps — ONLY if the date is a known market holiday
+            # (partial holiday data causes flat-filler stripping gaps).
+            # Non-holiday same-day gaps are real outages → must be flagged.
             if prev["time"].date() == cur["time"].date():
-                continue
+                if prev["time"].strftime("%Y-%m-%d") in MARKET_HOLIDAYS:
+                    continue
+                # else: real same-day outage → falls through to gaps.append
             gaps.append((prev["time"], cur["time"], span_hours))
     if gaps:
         fatal += 1

@@ -138,7 +138,8 @@ def boundary_truncated_week_start(tmpdir):
 def same_day_partial_holiday_gap(tmpdir):
     """
     Christmas Day 2024: only Asian session hours have real bars.
-    Gap from 06:00 to 22:00 is same-day → excluded from gap check.
+    Gap from 06:00 to 22:00 is same-day holiday → excluded from gap check.
+    Should be CLEAN.
     """
     rows = [
         ['2024-12-25 00:00:00', '1.10000', '1.10050', '1.09950', '1.10020', '100'],
@@ -152,6 +153,21 @@ def same_day_partial_holiday_gap(tmpdir):
         ['2024-12-25 23:00:00', '1.10160', '1.10210', '1.10110', '1.10180', '100'],
     ]
     make_csv(rows, os.path.join(tmpdir, '2024-12-25.csv'))
+
+
+def same_day_non_holiday_gap(tmpdir):
+    """
+    Non-holiday with same-day gap (mid-day outage).
+    Should be REJECT (real outage, not a holiday artifact).
+    """
+    rows = [
+        ['2024-03-15 00:00:00', '1.10000', '1.10050', '1.09950', '1.10020', '100'],
+        ['2024-03-15 01:00:00', '1.10020', '1.10070', '1.09970', '1.10040', '100'],
+        # 10-hour gap — real outage
+        ['2024-03-15 11:00:00', '1.10100', '1.10150', '1.10050', '1.10120', '100'],
+        ['2024-03-15 12:00:00', '1.10120', '1.10170', '1.10070', '1.10140', '100'],
+    ]
+    make_csv(rows, os.path.join(tmpdir, '2024-03-15.csv'))
 
 
 def real_gap_non_holiday(tmpdir):
@@ -185,6 +201,7 @@ run_test("Multi-file gap", multi_file_gap, "REJECT")
 print("\nPhase 2.1: Historical-failure tests:")
 run_test("Boundary-truncated week start", boundary_truncated_week_start, "CLEAN")
 run_test("Same-day partial holiday gap", same_day_partial_holiday_gap, "CLEAN")
+run_test("Same-day non-holiday gap", same_day_non_holiday_gap, "REJECT")
 run_test("Real gap (Mon→Wed, no holiday)", real_gap_non_holiday, "REJECT")
 
 print(f"\n=== RESULTS: {PASSED} passed, {FAILED} failed ===")
