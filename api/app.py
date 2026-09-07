@@ -90,9 +90,12 @@ def health():
         
         # Check if bot heartbeat is recent (within last 60 seconds)
         if bot_status and bot_status.get('last_heartbeat'):
-            last_heartbeat = datetime.fromisoformat(bot_status['last_heartbeat'])
-            time_since_heartbeat = (datetime.now() - last_heartbeat).total_seconds()
-            bot_alive = time_since_heartbeat < 60
+            try:
+                last_heartbeat = datetime.fromisoformat(bot_status['last_heartbeat'])
+                time_since_heartbeat = abs((datetime.now() - last_heartbeat).total_seconds())
+                bot_alive = time_since_heartbeat < 60 and bot_status.get('is_running', 0) == 1
+            except Exception:
+                bot_alive = bool(bot_status.get('is_running', 0))
         else:
             bot_alive = False
         

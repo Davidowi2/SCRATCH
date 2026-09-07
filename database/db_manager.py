@@ -371,9 +371,9 @@ class DatabaseManager:
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE bot_status 
-                SET last_heartbeat = datetime('now')
+                SET last_heartbeat = ?, is_running = 1
                 WHERE id = 1
-            """)
+            """, (datetime.now().isoformat(),))
             conn.commit()
     
     def get_bot_status(self) -> Dict[str, Any]:

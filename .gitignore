@@ -29,6 +29,10 @@ venv/
 env/
 ENV/
 
+# Research platform - market data (large, regenerable, Dukascopy redistribution terms)
+research/data/raw/
+research/data/*.csv
+
 # Database
 *.db
 *.db-journal
