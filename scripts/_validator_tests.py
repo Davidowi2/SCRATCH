@@ -2,6 +2,8 @@
 Validator test suite — synthetic datasets with known outcomes.
 Each test builds a tiny CSV, runs validate_data.audit(), and checks the verdict.
 All must pass → validator is frozen.
+
+Run: python scripts/_validator_tests.py
 """
 import csv
 import os
@@ -9,7 +11,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'research', 'data'))
-from validate_data import audit, MARKET_HOLIDAYS, ASIAN_HOURS
+from validate_data import audit, MARKET_HOLIDAYS
 
 PASSED = 0
 FAILED = 0
@@ -37,8 +39,10 @@ def run_test(name, fn, expected_verdict):
             FAILED += 1
 
 
+# === ORIGINAL TESTS ===
+
 def clean_single_day(tmpdir):
-    """Clean single day — should be CLEAN (all real bars, no gaps, no flags)"""
+    """Clean single day — should be CLEAN"""
     rows = [
         ['2024-01-02 00:00:00', '1.10000', '1.10050', '1.09950', '1.10020', '100'],
         ['2024-01-02 01:00:00', '1.10020', '1.10070', '1.09970', '1.10040', '100'],
@@ -69,25 +73,25 @@ def clean_single_day(tmpdir):
 
 
 def ohlc_fail_day(tmpdir):
-    """OHLC integrity failure — should be FLAGGED (high < low)"""
+    """OHLC failure — should be FLAGGED (high < low)"""
     rows = [
-        ['2024-01-02 00:00:00', '1.10000', '1.09950', '1.10050', '1.10020', '100'],  # high < low
+        ['2024-01-02 00:00:00', '1.10000', '1.09950', '1.10050', '1.10020', '100'],
         ['2024-01-02 01:00:00', '1.10020', '1.10070', '1.09970', '1.10040', '100'],
     ]
     make_csv(rows, os.path.join(tmpdir, '2024-01-02.csv'))
 
 
 def weekend_contam_day(tmpdir):
-    """Weekend contamination — Saturday real bar should be stripped + FLAGGED"""
+    """Weekend contamination — Saturday real bars → FLAGGED"""
     rows = [
-        ['2024-01-06 00:00:00', '1.10000', '1.10050', '1.09950', '1.10020', '100'],  # Saturday
-        ['2024-01-06 01:00:00', '1.10020', '1.10070', '1.09970', '1.10040', '100'],  # Saturday
+        ['2024-01-06 00:00:00', '1.10000', '1.10050', '1.09950', '1.10020', '100'],
+        ['2024-01-06 01:00:00', '1.10020', '1.10070', '1.09970', '1.10040', '100'],
     ]
     make_csv(rows, os.path.join(tmpdir, '2024-01-06.csv'))
 
 
 def holiday_day(tmpdir):
-    """Market holiday — all flat filler on known holiday"""
+    """Market holiday — all flat filler → REJECT (no real bars)"""
     rows = [
         ['2024-01-01 00:00:00', '1.10000', '1.10000', '1.10000', '1.10000', '0'],
         ['2024-01-01 01:00:00', '1.10000', '1.10000', '1.10000', '1.10000', '0'],
@@ -96,35 +100,92 @@ def holiday_day(tmpdir):
 
 
 def multi_file_gap(tmpdir):
-    """Two consecutive days with a gap — should be REJECT"""
+    """Two consecutive days with a gap → REJECT"""
     day1 = [
         ['2024-01-02 00:00:00', '1.10000', '1.10050', '1.09950', '1.10020', '100'],
         ['2024-01-02 01:00:00', '1.10020', '1.10070', '1.09970', '1.10040', '100'],
     ]
     day2 = [
-        ['2024-01-03 10:00:00', '1.10100', '1.10150', '1.10050', '1.10120', '100'],
-        ['2024-01-03 11:00:00', '1.10120', '1.10170', '1.10070', '1.10140', '100'],
+        ['2024-01-04 10:00:00', '1.10100', '1.10150', '1.10050', '1.10120', '100'],  # Wednesday
+        ['2024-01-04 11:00:00', '1.10120', '1.10170', '1.10070', '1.10140', '100'],
     ]
     make_csv(day1, os.path.join(tmpdir, '2024-01-02.csv'))
-    make_csv(day2, os.path.join(tmpdir, '2024-01-03.csv'))
+    make_csv(day2, os.path.join(tmpdir, '2024-01-04.csv'))
 
 
-print("=== VALIDATOR TEST SUENITE ===\n")
+# === PHASE 2.1: HISTORICAL-FAILURE TESTS ===
 
-# 1. Clean single day
-run_test("Clean single day (all real, no gaps)", clean_single_day, "CLEAN")
+def boundary_truncated_week_start(tmpdir):
+    """
+    Dataset starts 2021-01-03 (Sunday). First week is truncated.
+    Should be CLEAN because the validator excludes boundary weeks
+    from session coverage check.
+    """
+    rows = [
+        ['2021-01-03 22:00:00', '1.10000', '1.10050', '1.09950', '1.10020', '100'],
+        ['2021-01-03 23:00:00', '1.10020', '1.10070', '1.09970', '1.10040', '100'],
+        ['2021-01-04 00:00:00', '1.10040', '1.10090', '1.09990', '1.10060', '100'],
+        ['2021-01-04 01:00:00', '1.10060', '1.10110', '1.10010', '1.10080', '100'],
+        ['2021-01-04 02:00:00', '1.10080', '1.10130', '1.10030', '1.10100', '100'],
+        ['2021-01-04 03:00:00', '1.10100', '1.10150', '1.10050', '1.10120', '100'],
+        ['2021-01-04 04:00:00', '1.10120', '1.10170', '1.10070', '1.10140', '100'],
+        ['2021-01-04 05:00:00', '1.10140', '1.10190', '1.10090', '1.10160', '100'],
+        ['2021-01-04 06:00:00', '1.10160', '1.10210', '1.10110', '1.10180', '100'],
+    ]
+    make_csv(rows, os.path.join(tmpdir, '2021-01-03.csv'))
 
-# 2. OHLC failure
-run_test("OHLC integrity failure (high < low)", ohlc_fail_day, "FLAGGED")
 
-# 3. Weekend contamination
-run_test("Weekend contamination (Saturday real bars)", weekend_contam_day, "FLAGGED")
+def same_day_partial_holiday_gap(tmpdir):
+    """
+    Christmas Day 2024: only Asian session hours have real bars.
+    Gap from 06:00 to 22:00 is same-day → excluded from gap check.
+    """
+    rows = [
+        ['2024-12-25 00:00:00', '1.10000', '1.10050', '1.09950', '1.10020', '100'],
+        ['2024-12-25 01:00:00', '1.10020', '1.10070', '1.09970', '1.10040', '100'],
+        ['2024-12-25 02:00:00', '1.10040', '1.10090', '1.09990', '1.10060', '100'],
+        ['2024-12-25 03:00:00', '1.10060', '1.10110', '1.10010', '1.10080', '100'],
+        ['2024-12-25 04:00:00', '1.10080', '1.10130', '1.10030', '1.10100', '100'],
+        ['2024-12-25 05:00:00', '1.10100', '1.10150', '1.10050', '1.10120', '100'],
+        ['2024-12-25 06:00:00', '1.10120', '1.10170', '1.10070', '1.10140', '100'],
+        ['2024-12-25 22:00:00', '1.10140', '1.10190', '1.10090', '1.10160', '100'],
+        ['2024-12-25 23:00:00', '1.10160', '1.10210', '1.10110', '1.10180', '100'],
+    ]
+    make_csv(rows, os.path.join(tmpdir, '2024-12-25.csv'))
 
-# 4. Holiday
-run_test("Market holiday (all flat, known holiday)", holiday_day, "REJECT")
 
-# 5. Multi-file gap
-run_test("Multi-file data gap (>4h not explained)", multi_file_gap, "REJECT")
+def real_gap_non_holiday(tmpdir):
+    """
+    Monday → Wednesday gap (no Saturday in between, no holiday).
+    Should be REJECT.
+    """
+    day1 = [
+        ['2024-03-11 00:00:00', '1.10000', '1.10050', '1.09950', '1.10020', '100'],
+        ['2024-03-11 01:00:00', '1.10020', '1.10070', '1.09970', '1.10040', '100'],
+    ]
+    day2 = [
+        ['2024-03-13 10:00:00', '1.10100', '1.10150', '1.10050', '1.10120', '100'],
+        ['2024-03-13 11:00:00', '1.10120', '1.10170', '1.10070', '1.10140', '100'],
+    ]
+    make_csv(day1, os.path.join(tmpdir, '2024-03-11.csv'))
+    make_csv(day2, os.path.join(tmpdir, '2024-03-13.csv'))
+
+
+print("=== VALIDATOR TEST SUITE ===\n")
+
+# Original tests
+print("Original tests:")
+run_test("Clean single day", clean_single_day, "CLEAN")
+run_test("OHLC integrity failure", ohlc_fail_day, "FLAGGED")
+run_test("Weekend contamination", weekend_contam_day, "FLAGGED")
+run_test("Market holiday (no real bars)", holiday_day, "REJECT")
+run_test("Multi-file gap", multi_file_gap, "REJECT")
+
+# Phase 2.1: Historical-failure tests
+print("\nPhase 2.1: Historical-failure tests:")
+run_test("Boundary-truncated week start", boundary_truncated_week_start, "CLEAN")
+run_test("Same-day partial holiday gap", same_day_partial_holiday_gap, "CLEAN")
+run_test("Real gap (Mon→Wed, no holiday)", real_gap_non_holiday, "REJECT")
 
 print(f"\n=== RESULTS: {PASSED} passed, {FAILED} failed ===")
 if FAILED > 0:
