@@ -93,7 +93,7 @@ class Trade:
 def verify_frozen_artifacts():
     """Verify all frozen artifacts before running."""
     # Dataset hash
-    dataset_path = os.path.join(_SCRIPT_DIR, "..", "research", "data", "OOS_FROZEN")
+    dataset_path = os.path.join(_SCRIPT_DIR, "..", "data", "raw", "OOS_FROZEN")
     if os.path.isdir(dataset_path):
         sha = hashlib.sha256()
         for fname in sorted(os.listdir(dataset_path)):
@@ -106,7 +106,7 @@ def verify_frozen_artifacts():
         logger.info("Dataset hash verified: %s...", actual[:12])
 
     # Engine hash
-    engine_path = os.path.join(_SCRIPT_DIR, "..", "research", "backtest", "run_h1.py")
+    engine_path = os.path.join(_SCRIPT_DIR, "run_h1.py")
     with open(engine_path, "rb") as f:
         actual = hashlib.sha256(f.read()).hexdigest()
     if actual != EXPECTED_ENGINE_HASH:
