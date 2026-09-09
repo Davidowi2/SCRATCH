@@ -1,6 +1,6 @@
 kernel_id,name,status,parent_id,justification,provenance,added_date
 H-001,fade Z>=2 SMA20 Asia 22-07 EURUSD H1,LIVE,PRE-FACTORY,PRE-FACTORY,2026-09-08
-H-003,fade Z>=2 SMA20 Asia 22-07 GBPUSD H1,KILLED,H-001,OOS KILL: PF=0.83 (<1.0 hard kill). Edge might be euro-only — GBP USD wider friction ate the thin margin. IS was DANGER (1.148491).,AUDITOR,2026-09-09
+H-003,fade Z>=2 SMA20 Asia 22-07 GBPUSD H1,MECHANISM-DEAD (scoped to GBPUSD),H-001,OOS KILL: PF=0.834950 (<1.0 hard kill). EURUSD instantiation remains LIVE (H-001 paper phase). Cross-instrument generalization falsified for 2024-01..2025-05.,AUDITOR,2026-09-09
 H-002,ESCAPE: ride closes >=2.5SD Asia,MECHANISM-DEAD,,PF 0.20, WR 14.5%, 85% reversal, diagnostic inversion of live H-001. Re-test forbidden absent owner override + new evidence.,AUDITOR,2026-09-08
 H-002-v1,4H trend London,UNTESTED,,tombstoned pre-backtest,AUDITOR,2026-09-08
 Edge-Labs,legacy scalper,LEGACY-RETIRED,,pre-machine no records,AUDITOR,2026-09-08
