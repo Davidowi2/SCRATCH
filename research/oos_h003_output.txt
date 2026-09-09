@@ -1,0 +1,14 @@
+2026-09-09 22:18:04,406 [INFO] gbpusd_h1: Engine hash verified: 6226222c1eb0...
+==============================================================================
+H-003 | Mean reversion GBPUSD H1 | Z>2 SMA20 1SD-band reversion, Asian 22:00-07:00, GBPUSD, maxhold 8, SL 1.5xSD, friction 1.0
+Data: 8509 H1 bars, 2024-01-01..2025-05-13 | phase=oos
+==============================================================================
+
+Trades: 59
+  wins=32  win_rate=54.2%  PF=0.83  expectancy=-1.76 pips  maxDD=320.0 pips  avg_hold=3.4 bars
+  Exit reasons: {'REVERT': 33, 'STOP': 26}
+
+VERDICT: KILL
+  OOS PF 0.83 < 1.0
+
+Trade log: research\trade_log_oos_h003.csv
