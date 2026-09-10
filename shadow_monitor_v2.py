@@ -98,6 +98,7 @@ def compute_z(closes):
 
 
 def run_monitor():
+    """Main monitor loop."""
     logger.info("=" * 60)
     logger.info("SHADOW MONITOR v2 STARTING (with gap tracking)")
     logger.info("=" * 60)
@@ -110,6 +111,21 @@ def run_monitor():
     gap_list = []
     start_time = datetime.utcnow()
     restart_count = 0
+
+    # FIX: Resume from DB to prevent duplicate logging after restart.
+    # Query the latest bar timestamp already in the DB and skip bars
+    # we've already logged.
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT MAX(timestamp) FROM signal_log WHERE phase='paper'")
+        row = cursor.fetchone()
+        if row and row[0]:
+            last_bar_timestamp = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S")
+            logger.info(f"Resumed from DB: last bar at {last_bar_timestamp}")
+        conn.close()
+    except Exception as e:
+        logger.warning(f"Could not query DB for resume state: {e}")
 
     while True:
         try:
