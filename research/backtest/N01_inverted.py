@@ -1,15 +1,19 @@
 """
-N01_inverted.py — Noise Kernel: Inverted entry (continuation with inverted exit)
+N01_inverted.py — Noise Kernel: Inverted Entry Logic (Continuation Test)
+
+Same as H-001 but entry is reversed (continuation instead of reversion).
+Exit logic is ALSO inverted to test true continuation:
+  - LONG (entered at Z>=2): exits when Z <= +1.0 (continuation failed, reverted)
+  - SHORT (entered at Z<=-2): exits when Z >= -1.0 (continuation failed)
+
+Should NOT pass — this tests whether extreme moves continue (they don't).
 
 CALIBRATION PURPOSE: Known-bad kernel. Expected verdict: KILL.
-# Entry: Z>=2->LONG, Z<=-2->SHORT
-# Exit: LONG exits when Z<=1, SHORT exits when Z>=-1
 """
 
 import csv
 import math
 import os
-import random
 import sys
 from datetime import datetime
 
@@ -77,6 +81,8 @@ def stats_through(closes, j):
     mean = sum(window) / MA_PERIOD
     sd = math.sqrt(sum((x - mean) ** 2 for x in window) / MA_PERIOD)
     return mean, sd
+
+
 def run_backtest(bars, friction_override=None):
     opens = [b["open"] for b in bars]
     highs = [b["high"] for b in bars]
@@ -85,7 +91,6 @@ def run_backtest(bars, friction_override=None):
     n = len(bars)
     trades = []
     friction = friction_override if friction_override is not None else FRICTION_PIPS
-    random.seed(42)  # Reproducible noise
 
     i = 0
     while i < n:
@@ -94,15 +99,17 @@ def run_backtest(bars, friction_override=None):
             if prior is not None and prior[1] > 0:
                 mean, sd = prior
                 z = (closes[i - 1] - mean) / sd
+
                 # INVERTED: Z>=2 -> LONG (continuation), Z<=-2 -> SHORT
                 if z >= Z_ENTRY:
-                    sl = opens[i] - SL_SD_MULT * sd
+                    sl = opens[i] - SL_SD_MULT * sd  # stop below for LONG
                     t = Trade(i, opens[i], "LONG", sd, sl)
                 elif z <= -Z_ENTRY:
-                    sl = opens[i] + SL_SD_MULT * sd
+                    sl = opens[i] + SL_SD_MULT * sd  # stop above for SHORT
                     t = Trade(i, opens[i], "SHORT", sd, sl)
                 else:
                     t = None
+
                 if t is not None:
                     trades.append(t)
                     i = t.entry_idx
@@ -122,7 +129,8 @@ def run_backtest(bars, friction_override=None):
                                 thru = stats_through(closes, j)
                                 if thru is not None and thru[1] > 0:
                                     zj = (closes[j] - thru[0]) / thru[1]
-                                    if zj <= Z_EXIT:  # exit when price falls back
+                                    # INVERTED EXIT: LONG exits when Z <= +1.0 (continuation failed)
+                                    if zj <= Z_EXIT:
                                         t.exit_idx, t.exit_price = j, closes[j]
                                         t.exit_reason = "REVERT"
                                         exited = True
@@ -139,7 +147,8 @@ def run_backtest(bars, friction_override=None):
                                 thru = stats_through(closes, j)
                                 if thru is not None and thru[1] > 0:
                                     zj = (closes[j] - thru[0]) / thru[1]
-                                    if zj >= -Z_EXIT:  # exit when price rises back
+                                    # INVERTED EXIT: SHORT exits when Z >= -1.0 (continuation failed)
+                                    if zj >= -Z_EXIT:
                                         t.exit_idx, t.exit_price = j, closes[j]
                                         t.exit_reason = "REVERT"
                                         exited = True
@@ -163,6 +172,8 @@ def run_backtest(bars, friction_override=None):
                     continue
         i += 1
     return trades
+
+
 def compute_metrics(trades):
     if not trades:
         return {"n": 0, "wins": 0, "win_rate": 0, "profit_factor": 0,
@@ -171,7 +182,6 @@ def compute_metrics(trades):
     gross_profit = sum(t.pips for t in wins)
     gross_loss = -sum(t.pips for t in trades if t.pips <= 0)
 
-    # Proper max DD computation
     equity, peak, max_dd = 0.0, 0.0, 0.0
     for t in trades:
         equity += t.pips
