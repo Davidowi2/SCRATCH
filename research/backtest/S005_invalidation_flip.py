@@ -229,11 +229,14 @@ def run_backtest(bars, friction_override=None):
         # Check pending setup for invalidation signal
         if pending_setup is not None:
             ps = pending_setup
-            # Invalidation: close beyond S
+            # O1: Invalidation requires CROSS EVENT (close[i] beyond S AND close[i-1] not beyond)
+            # O1: Leg consumed on invalidation bar EVEN IF signal discarded (position open)
             if ps["side"] == "SHORT":
                 # Down leg: invalidation is close > S
-                if closes[i] > ps["S"] and i > ps["bos_idx"]:
-                    # Check one-position rule: if position open, discard
+                if closes[i] > ps["S"] and i > ps["bos_idx"] and closes[i - 1] <= ps["S"]:
+                    # Consume leg regardless of position state (O1)
+                    pending_setup = None
+                    # Check one-position rule: if position open, discard signal
                     if not position_open and i + 1 < n:
                         atr = atr14(highs, lows, closes, i)
                         if atr is not None and atr > 0:
@@ -245,12 +248,13 @@ def run_backtest(bars, friction_override=None):
                                 t = Trade(i + 1, entry_price, "LONG", stop_price, target_price)
                                 trades.append(t)
                                 position_open = True
-                                pending_setup = None
                                 i += 1
                                 continue
             else:  # LONG leg (from uptrend)
                 # Up leg: invalidation is close < S
-                if closes[i] < ps["S"] and i > ps["bos_idx"]:
+                if closes[i] < ps["S"] and i > ps["bos_idx"] and closes[i - 1] >= ps["S"]:
+                    # Consume leg regardless of position state (O1)
+                    pending_setup = None
                     if not position_open and i + 1 < n:
                         atr = atr14(highs, lows, closes, i)
                         if atr is not None and atr > 0:
@@ -262,7 +266,6 @@ def run_backtest(bars, friction_override=None):
                                 t = Trade(i + 1, entry_price, "SHORT", stop_price, target_price)
                                 trades.append(t)
                                 position_open = True
-                                pending_setup = None
                                 i += 1
                                 continue
 
