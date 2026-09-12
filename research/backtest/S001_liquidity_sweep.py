@@ -213,7 +213,7 @@ def run_backtest(bars, friction_override=None):
                             trades.append(t)
                             position_open = True
                             last_confirmed_high = None  # Level consumed
-                            i += 2
+                            i += 1
                             continue
             # R2: Breakout detection - discard level if closed beyond
             elif highs[i] > h_level and closes[i] >= h_level:
@@ -234,7 +234,7 @@ def run_backtest(bars, friction_override=None):
                             trades.append(t)
                             position_open = True
                             last_confirmed_low = None  # Level consumed
-                            i += 2
+                            i += 1
                             continue
             # R2: Breakout detection - discard level if closed beyond
             elif lows[i] < l_level and closes[i] <= l_level:
