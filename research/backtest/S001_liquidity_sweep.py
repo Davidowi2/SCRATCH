@@ -14,6 +14,17 @@ Implements the exact math from the Overseer's locked spec:
 6. Target: fixed 1.5R.
 7. One position at a time.
 
+R1 — STOP BEFORE TARGET (enforced in exit evaluation order):
+   On any bar after entry, evaluate the STOP before the TARGET.
+   An open gapping through the stop fills at the open.
+   If a single bar touches both stop and target, the trade counts as a LOSS.
+   Max-hold exit is checked after stop/target for that bar, at the close.
+
+R2 — SWEEP vs BREAKOUT:
+   A level pierced but CLOSED BEYOND (C[j] >= level for highs,
+   C[j] <= level for lows) is a breakout: discard the level, NO trade.
+   A sweep requires a wick beyond AND a close strictly back inside.
+
 Risk Rails:
 - Max hold 72 bars (Overseer-added safety rail; owner may veto)
 - Friction 0.5 pips/trade
@@ -42,7 +53,6 @@ MAX_HOLD_BARS = 72
 ATR_PERIOD = 14
 STOP_ATR_MULT = 0.5
 TARGET_R = 1.5
-# Session filter: none (all hours) — implemented as empty set check
 
 
 class Trade:
@@ -118,14 +128,11 @@ def run_backtest(bars, friction_override=None):
     trades = []
     friction = friction_override if friction_override is not None else FRICTION_PIPS
 
-    # Track confirmed fractals and active levels
-    # active_high_level = None  # Most recent confirmed fractal high
-    # active_low_level = None   # Most recent confirmed fractal low
     last_confirmed_high = None  # (index, price)
     last_confirmed_low = None   # (index, price)
     position_open = False
 
-    i = 2  # Start at 2 so we can look back for fractals
+    i = 2
     while i < n:
         # Confirm fractals at i-2 (fractal at i-2 is now confirmed at bar i)
         confirm_idx = i - 2
@@ -136,23 +143,21 @@ def run_backtest(bars, friction_override=None):
                 last_confirmed_low = (confirm_idx, lows[confirm_idx])
 
         if position_open:
-            # Manage existing position
             t = trades[-1]
             j = i
             exited = False
 
             if t.side == "SHORT":
-                # Check stop hit
-                if opens[j] >= t.stop:
+                # R1: Evaluate STOP before TARGET
+                if opens[j] >= t.stop:  # Open gaps through stop -> fills at open
                     t.exit_idx, t.exit_price = j, opens[j]
                     t.exit_reason = "STOP"
                     exited = True
-                elif highs[j] >= t.stop:
+                elif highs[j] >= t.stop:  # High touches stop
                     t.exit_idx, t.exit_price = j, t.stop
                     t.exit_reason = "STOP"
                     exited = True
-                # Check target hit
-                elif lows[j] <= t.target:
+                elif lows[j] <= t.target:  # Low touches target
                     t.exit_idx, t.exit_price = j, t.target
                     t.exit_reason = "TARGET"
                     exited = True
@@ -170,6 +175,7 @@ def run_backtest(bars, friction_override=None):
                     t.exit_reason = "TARGET"
                     exited = True
 
+            # R1: Max-hold checked AFTER stop/target, at the close
             if not exited and (j - t.entry_idx) >= MAX_HOLD_BARS:
                 t.exit_idx, t.exit_price = j, closes[j]
                 t.exit_reason = "MAXHOLD"
@@ -190,41 +196,49 @@ def run_backtest(bars, friction_override=None):
             continue
 
         # Look for sweep setups
-        # Check if we have confirmed levels to work with
+        # R2: Sweep requires wick beyond AND close strictly back inside.
+        #     If level pierced but closed beyond -> breakout, discard level, NO trade.
         if last_confirmed_high is not None:
             h_idx, h_level = last_confirmed_high
-            # Sweep condition: H[j] > level AND C[j] < level
+            # R2: C[j] >= level for highs = breakout (discard, no trade)
             if highs[i] > h_level and closes[i] < h_level:
-                # Compute ATR14 from bars <= i
                 atr = atr14(highs, lows, closes, i)
                 if atr is not None and atr > 0:
                     stop_price = highs[i] + STOP_ATR_MULT * atr
-                    risk = stop_price - opens[i + 1] if i + 1 < n else None
-                    if risk is not None and risk > 0:
-                        target_price = opens[i + 1] - TARGET_R * risk
-                        t = Trade(i + 1, opens[i + 1], "SHORT", stop_price, target_price)
-                        trades.append(t)
-                        position_open = True
-                        last_confirmed_high = None  # Level consumed
-                        i += 2  # Skip to entry bar + 1
-                        continue
+                    if i + 1 < n:
+                        risk = stop_price - opens[i + 1]
+                        if risk > 0:
+                            target_price = opens[i + 1] - TARGET_R * risk
+                            t = Trade(i + 1, opens[i + 1], "SHORT", stop_price, target_price)
+                            trades.append(t)
+                            position_open = True
+                            last_confirmed_high = None  # Level consumed
+                            i += 2
+                            continue
+            # R2: Breakout detection - discard level if closed beyond
+            elif highs[i] > h_level and closes[i] >= h_level:
+                last_confirmed_high = None  # Breakout, discard level
 
         if last_confirmed_low is not None:
             l_idx, l_level = last_confirmed_low
-            # Sweep condition: L[j] < level AND C[j] > level
+            # R2: C[j] <= level for lows = breakout (discard, no trade)
             if lows[i] < l_level and closes[i] > l_level:
                 atr = atr14(highs, lows, closes, i)
                 if atr is not None and atr > 0:
                     stop_price = lows[i] - STOP_ATR_MULT * atr
-                    risk = opens[i + 1] - stop_price if i + 1 < n else None
-                    if risk is not None and risk > 0:
-                        target_price = opens[i + 1] + TARGET_R * risk
-                        t = Trade(i + 1, opens[i + 1], "LONG", stop_price, target_price)
-                        trades.append(t)
-                        position_open = True
-                        last_confirmed_low = None  # Level consumed
-                        i += 2
-                        continue
+                    if i + 1 < n:
+                        risk = opens[i + 1] - stop_price
+                        if risk > 0:
+                            target_price = opens[i + 1] + TARGET_R * risk
+                            t = Trade(i + 1, opens[i + 1], "LONG", stop_price, target_price)
+                            trades.append(t)
+                            position_open = True
+                            last_confirmed_low = None  # Level consumed
+                            i += 2
+                            continue
+            # R2: Breakout detection - discard level if closed beyond
+            elif lows[i] < l_level and closes[i] <= l_level:
+                last_confirmed_low = None  # Breakout, discard level
 
         i += 1
 
