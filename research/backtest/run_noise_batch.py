@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 RESEARCH_DIR = os.path.dirname(SCRIPT_DIR)
+PROJECT_DIR = os.path.dirname(RESEARCH_DIR)
 
 # Frozen windows
 IS_START = "2021-01-01"
@@ -191,7 +192,7 @@ def evaluate_phase(kernel_module, dataset_path, raw_dir, phase, gate1_log):
 
 def get_lifetime_tested():
     """Count resolved graveyard rows (excluding SMOKE-TEST and UNTESTED)."""
-    graveyard_path = os.path.join(RESEARCH_DIR, "factory", "graveyard.csv")
+    graveyard_path = os.path.join(PROJECT_DIR, "factory", "graveyard.csv")
     if not os.path.exists(graveyard_path):
         return 0
     
@@ -211,7 +212,7 @@ def get_lifetime_tested():
 
 def check_cool_off(batch_id, kernel_id):
     """Check if 24h cool-off has elapsed since IS completion."""
-    ledger_path = os.path.join(RESEARCH_DIR, "factory", "batch_ledger.csv")
+    ledger_path = os.path.join(PROJECT_DIR, "factory", "batch_ledger.csv")
     if not os.path.exists(ledger_path):
         return True, None
     
@@ -249,8 +250,8 @@ def run_batch(phase_filter=None):
     dataset_path = os.path.join(RESEARCH_DIR, "data", "eurusd_1h.csv")
     raw_dir = os.path.join(RESEARCH_DIR, "data", "raw", "EURUSD_H1")
     gate1_log = os.path.join(RESEARCH_DIR, "data", "data_audit.log")
-    ledger_path = os.path.join(RESEARCH_DIR, "factory", "batch_ledger.csv")
-    graveyard_path = os.path.join(RESEARCH_DIR, "factory", "graveyard.csv")
+    ledger_path = os.path.join(PROJECT_DIR, "factory", "batch_ledger.csv")
+    graveyard_path = os.path.join(PROJECT_DIR, "factory", "graveyard.csv")
 
     if not os.path.exists(dataset_path):
         print(f"ERROR: Dataset not found: {dataset_path}")
