@@ -419,6 +419,9 @@ def run_batch(phase_filter=None):
         final = r.get("oos_verdict") or r.get("is_verdict")
         if final == "PASS-OOS":
             continue
+        # Exclude PASS-INSAMPLE (awaiting OOS) from killed count
+        if final == "PASS-INSAMPLE":
+            continue
         killed += 1
         cause = r.get("oos_verdict") or r.get("is_verdict")
         causes[cause] = causes.get(cause, 0) + 1
