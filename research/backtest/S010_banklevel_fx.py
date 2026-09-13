@@ -1,20 +1,30 @@
 """
 research/backtest/S010_banklevel_fx.py — S-010 Bank-Level FX Arm
 
-Implements the exact math from the Overseer's locked spec with rulings M2/M4/M5.
+Implements the exact math from Directive K v1 Task 2:
 
-M5 CORRECTIONS:
-- 06:00 bar excluded (illiquid transition)
-- Bid-side prices used (simulated via Dukascopy bid)
-- Friction 0.5 pips
+1. Bank Level = Asian range: high/low of H1 bars stamped 00:00-05:00 UTC.
+   The 06:00 UTC bar belongs to neither range nor window.
+2. If the range is already closed beyond BEFORE the window opens: skip day.
+3. Trigger window: bars stamped 07:00-10:00 UTC.
+4. Signal: FIRST bar in window closing beyond the range (cross-event:
+   prior close inside) AND (high-low) >= 1.0 * ATR14(H1).
+5. Entry: open of next bar. One trade per day max.
+6. Stop: opposite extreme of trigger bar. Target: 1.5R.
+7. Hard flat: close of bar stamped 11:00 UTC.
+8. Friction 0.5 pips. Prices are bid-side; friction covers spread.
 
 RULINGS:
-- M2: 2020 smoke slice allowed for calibration only (not IS/OOS)
-- M4: Pre-window violation skips day
-- M5: 06:00 bar excluded, bid-side, friction 0.5
+- R1: stop evaluated before target; one bar touching both = loss;
+  open gapping through stop fills at open; max-hold/flat checked after.
+- R3: entry-bar open gapping through planned stop discards signal.
+- M5: bid-side prices; friction 0.5 pips.
+- M2: 2020 slice (OUTSIDE frozen windows) may be used for audit-only
+  smoke tests after Overseer approval. Consumes no one-shot, records no verdict.
+- M4: pre-window violation skips day.
 
 CALIBRATION PURPOSE: Hypothesis test. Expected to pass or die cleanly based
-on whether bank-level zones produce predictable reactions in EURUSD H1.
+on whether Asian range breakouts produce predictable continuation in EURUSD H1.
 """
 
 import csv
@@ -29,16 +39,18 @@ from data.validate_data import audit as gate1_audit
 EXPERIMENT_ID = "S-010"
 PROCESS_VERSION = "v1"
 STRATEGY_FAMILY = "BANKLEVEL"
-PARAM_DESC = "Bank-level FX arm: fade/breakout at institutional zones"
+PARAM_DESC = "Bank-level FX arm: Asian range breakout, London open window"
 
 FRICTION_PIPS = 0.5
 PIP = 0.0001
 MAX_HOLD_BARS = 72
 ATR_PERIOD = 14
-STOP_ATR_MULT = 0.5
 TARGET_R = 1.5
-BANK_LEVEL_TOUCH_THRESHOLD = 0.0002  # 2 pips = touch zone
-BANK_LEVEL_CLUSTER_MIN = 3  # minimum reversals to define bank level
+
+# Session hours (UTC)
+ASIAN_RANGE_HOURS = {0, 1, 2, 3, 4, 5}  # 00:00-05:00 UTC
+TRIGGER_WINDOW_HOURS = {7, 8, 9, 10}     # 07:00-10:00 UTC
+HARD_FLAT_HOUR = 11                       # 11:00 UTC
 
 
 class Trade:
@@ -72,6 +84,7 @@ def load_dataset(path):
 
 
 def atr14(highs, lows, closes, j):
+    """Compute ATR14 using only bars up to and including j."""
     if j < ATR_PERIOD:
         return None
     trs = []
@@ -88,51 +101,41 @@ def atr14(highs, lows, closes, j):
     return sum(trs) / ATR_PERIOD
 
 
-def detect_bank_levels(bars, j):
+def compute_asian_range(bars, day_start_idx):
     """
-    Detect bank levels: price levels where reversals cluster.
-    Look back from bar j and find levels with >= BANK_LEVEL_CLUSTER_MIN reversals.
-    Returns list of (level_price, strength) tuples.
+    Compute Asian range high/low from H1 bars stamped 00:00-05:00 UTC.
+    Returns (range_high, range_low) or None if insufficient data.
     """
-    if j < 50:
-        return []
+    range_high = float("-inf")
+    range_low = float("inf")
+    found = False
     
-    lookback = min(j, 500)  # look back up to 500 bars
-    levels = []
+    for i in range(day_start_idx, len(bars)):
+        hour = bars[i]["time"].hour
+        if hour in ASIAN_RANGE_HOURS:
+            range_high = max(range_high, bars[i]["high"])
+            range_low = min(range_low, bars[i]["low"])
+            found = True
+        elif hour >= 6:
+            break
     
-    # Find swing highs and lows in lookback window
-    swings = []
-    for k in range(j - lookback + 5, j - 4):
-        if k < 5:
-            continue
-        # Swing high
-        if (bars[k]["high"] > bars[k-1]["high"] and bars[k]["high"] > bars[k-2]["high"] and
-            bars[k]["high"] > bars[k+1]["high"] and bars[k]["high"] > bars[k+2]["high"]):
-            swings.append(bars[k]["high"])
-        # Swing low
-        if (bars[k]["low"] < bars[k-1]["low"] and bars[k]["low"] < bars[k-2]["low"] and
-            bars[k]["low"] < bars[k+1]["low"] and bars[k]["low"] < bars[k+2]["low"]):
-            swings.append(bars[k]["low"])
-    
-    # Cluster nearby swings into bank levels
-    clusters = []
-    used = [False] * len(swings)
-    for i in range(len(swings)):
-        if used[i]:
-            continue
-        cluster = [swings[i]]
-        for j2 in range(i + 1, len(swings)):
-            if used[j2]:
-                continue
-            if abs(swings[j2] - swings[i]) < BANK_LEVEL_TOUCH_THRESHOLD:
-                cluster.append(swings[j2])
-                used[j2] = True
-        used[i] = True
-        if len(cluster) >= BANK_LEVEL_CLUSTER_MIN:
-            avg_level = sum(cluster) / len(cluster)
-            levels.append((avg_level, len(cluster)))
-    
-    return levels
+    return (range_high, range_low) if found else None
+
+
+def is_range_closed_before_window(bars, day_start_idx, range_high, range_low):
+    """
+    Check if price already closed beyond the Asian range BEFORE the
+    trigger window opens (07:00 UTC). If so, skip the day (M4).
+    """
+    for i in range(day_start_idx, len(bars)):
+        hour = bars[i]["time"].hour
+        if hour == 6:
+            # 06:00 bar - check if it closed beyond range
+            if bars[i]["close"] > range_high or bars[i]["close"] < range_low:
+                return True
+        elif hour >= 7:
+            break
+    return False
 
 
 def run_backtest(bars, friction_override=None):
@@ -146,14 +149,18 @@ def run_backtest(bars, friction_override=None):
     friction = friction_override if friction_override is not None else FRICTION_PIPS
     
     position_open = False
-    active_bank_levels = []  # (level, side, consumed)
+    trade_today = False
+    current_day = None
     
-    i = 50  # start after enough bars for bank level detection
+    i = 0
     while i < n:
-        # M5: exclude 06:00 bar
-        if bars[i]["time"].hour == 6:
-            i += 1
-            continue
+        bar_time = bars[i]["time"]
+        bar_date = bar_time.date()
+        
+        # New day reset
+        if bar_date != current_day:
+            current_day = bar_date
+            trade_today = False
         
         # Check existing position
         if position_open:
@@ -161,6 +168,7 @@ def run_backtest(bars, friction_override=None):
             j = i
             exited = False
             
+            # R1: Evaluate STOP before TARGET
             if t.side == "SHORT":
                 if opens[j] >= t.stop:
                     t.exit_idx, t.exit_price = j, opens[j]
@@ -188,9 +196,16 @@ def run_backtest(bars, friction_override=None):
                     t.exit_reason = "TARGET"
                     exited = True
             
+            # R1: Max-hold checked AFTER stop/target, at the close
+            # Hard flat at 11:00 UTC
             if not exited and (j - t.entry_idx) >= MAX_HOLD_BARS:
                 t.exit_idx, t.exit_price = j, closes[j]
                 t.exit_reason = "MAXHOLD"
+                exited = True
+            
+            if not exited and bar_time.hour >= HARD_FLAT_HOUR:
+                t.exit_idx, t.exit_price = j, closes[j]
+                t.exit_reason = "HARDFLAT"
                 exited = True
             
             if exited:
@@ -208,77 +223,69 @@ def run_backtest(bars, friction_override=None):
             i += 1
             continue
         
-        # Detect bank levels
-        bank_levels = detect_bank_levels(bars, i)
+        # Look for signals (only if no trade today)
+        if trade_today:
+            i += 1
+            continue
         
-        # Check for signals at bank levels
-        for level, strength in bank_levels:
-            # Check if price is touching the level
-            if lows[i] <= level <= highs[i]:
-                # Price touching bank level - check for fade or breakout
-                atr = atr14(highs, lows, closes, i)
-                if atr is None or atr <= 0:
-                    continue
+        # Compute Asian range for this day
+        asian_range = compute_asian_range(bars, i)
+        if asian_range is None:
+            i += 1
+            continue
+        
+        range_high, range_low = asian_range
+        
+        # Check if we're in trigger window (07:00-10:00 UTC)
+        if bar_time.hour in TRIGGER_WINDOW_HOURS:
+            # Check M4: skip if range already closed beyond before window
+            if is_range_closed_before_window(bars, i, range_high, range_low):
+                trade_today = True  # Mark as processed (skipped)
+                i += 1
+                continue
+            
+            # Cross-event rule: first bar closing beyond range
+            prior_close_inside = (closes[i - 1] >= range_low and closes[i - 1] <= range_high) if i > 0 else True
+            
+            if prior_close_inside:
+                # Check LONG signal
+                if closes[i] > range_high:
+                    bar_range = highs[i] - lows[i]
+                    atr = atr14(highs, lows, closes, i)
+                    if atr is not None and bar_range >= 1.0 * atr:
+                        # R3: check entry-bar open doesn't gap through stop
+                        if i + 1 < n:
+                            entry_price = opens[i + 1]
+                            stop_price = lows[i]  # opposite extreme of trigger bar
+                            risk = entry_price - stop_price
+                            if risk > 0 and entry_price > stop_price:
+                                target_price = entry_price + TARGET_R * risk
+                                t = Trade(i + 1, entry_price, "LONG", stop_price, target_price)
+                                t.gross_pips = 0
+                                trades.append(t)
+                                position_open = True
+                                trade_today = True
+                                i += 2
+                                continue
                 
-                # Fade: close back inside range after touch
-                if closes[i] < level and lows[i] <= level:
-                    # SHORT fade (price touched level from below, closed below)
-                    if i + 1 < n:
-                        entry_price = opens[i + 1]
-                        stop_price = highs[i] + STOP_ATR_MULT * atr
-                        risk = stop_price - entry_price
-                        if risk > 0:
-                            target_price = entry_price - TARGET_R * risk
-                            t = Trade(i + 1, entry_price, "SHORT", stop_price, target_price)
-                            t.gross_pips = 0
-                            trades.append(t)
-                            position_open = True
-                            i += 2
-                            break
-                elif closes[i] > level and highs[i] >= level:
-                    # LONG fade (price touched level from above, closed above)
-                    if i + 1 < n:
-                        entry_price = opens[i + 1]
-                        stop_price = lows[i] - STOP_ATR_MULT * atr
-                        risk = entry_price - stop_price
-                        if risk > 0:
-                            target_price = entry_price + TARGET_R * risk
-                            t = Trade(i + 1, entry_price, "LONG", stop_price, target_price)
-                            t.gross_pips = 0
-                            trades.append(t)
-                            position_open = True
-                            i += 2
-                            break
-                
-                # Breakout: close beyond level
-                if closes[i] > level + BANK_LEVEL_TOUCH_THRESHOLD:
-                    # LONG breakout
-                    if i + 1 < n:
-                        entry_price = opens[i + 1]
-                        stop_price = level - STOP_ATR_MULT * atr
-                        risk = entry_price - stop_price
-                        if risk > 0:
-                            target_price = entry_price + TARGET_R * risk
-                            t = Trade(i + 1, entry_price, "LONG", stop_price, target_price)
-                            t.gross_pips = 0
-                            trades.append(t)
-                            position_open = True
-                            i += 2
-                            break
-                elif closes[i] < level - BANK_LEVEL_TOUCH_THRESHOLD:
-                    # SHORT breakout
-                    if i + 1 < n:
-                        entry_price = opens[i + 1]
-                        stop_price = level + STOP_ATR_MULT * atr
-                        risk = stop_price - entry_price
-                        if risk > 0:
-                            target_price = entry_price - TARGET_R * risk
-                            t = Trade(i + 1, entry_price, "SHORT", stop_price, target_price)
-                            t.gross_pips = 0
-                            trades.append(t)
-                            position_open = True
-                            i += 2
-                            break
+                # Check SHORT signal
+                if closes[i] < range_low:
+                    bar_range = highs[i] - lows[i]
+                    atr = atr14(highs, lows, closes, i)
+                    if atr is not None and bar_range >= 1.0 * atr:
+                        if i + 1 < n:
+                            entry_price = opens[i + 1]
+                            stop_price = highs[i]  # opposite extreme of trigger bar
+                            risk = stop_price - entry_price
+                            if risk > 0 and entry_price < stop_price:
+                                target_price = entry_price - TARGET_R * risk
+                                t = Trade(i + 1, entry_price, "SHORT", stop_price, target_price)
+                                t.gross_pips = 0
+                                trades.append(t)
+                                position_open = True
+                                trade_today = True
+                                i += 2
+                                continue
         
         i += 1
     

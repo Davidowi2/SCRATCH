@@ -121,6 +121,31 @@ rewrite/reorder graveyard rows; never skip a ladder rung; never
 touch real money; never hide or understate batch size; no graveyard
 row without a pasted artifact and verdict hash.
 
+H-001 SHADOW LANE RULING (Option B, Owner-approved):
+H-001 remains LIVE-shadow as a data collector only. Divorced from ladder
+promotion: ineligible for real money without a fresh OOS pass on a
+re-preregistered kernel. Its logged fills are excluded from ladder
+statistics (IS/OOS/Paper), graveyard verdicts, luck ledger, and
+null_pass_rate.
+
+## Addendums
+
+H-001 SHADOW LANE ADDENDUM (Option B):
+The shadow data collector is DIVORCED from the ladder.
+It records live fills (timestamp, side, price, spread, slippage)
+in a SEPARATE table (shadow_fills) and is used ONLY for:
+  - Weekly heartbeats
+  - Spread monitoring
+  - Slippage analysis
+Fills from the shadow lane are EXCLUDED from:
+  - Ladder statistics (IS/OOS/Paper)
+  - Graveyard verdicts
+  - Luck ledger
+  - null_pass_rate
+The shadow lane has no gates. It collects whatever the live feed
+produces. The ladder runs on frozen historical data only.
+This separation is permanent and non-negotiable.
+
 STANDING DEBTS (paste with Phase 0 delivery, third+ request):
   1. Day-0 balance on screen: $100,000 or $1,000,000 — which is real?
   2. Leverage from account settings (not assumed).

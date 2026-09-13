@@ -1,11 +1,13 @@
 """
-shadow_monitor_v3.py — Continuous live feed monitor with spread logging.
+shadow_monitor_v3.py — Spread logger with CFD jurisdiction (Path 2).
 
 New in v3:
 - spread_log table: instrument, ts_utc, bid, ask, spread_pts, ny_session_bool
+- NY session = 09:30-11:00 ET (America/New_York, DST-aware)
 - Resolves TradeLocker instrument IDs for NAS100 and US30
-- Polls multiple instruments for spread monitoring
-- 5-day spread collection for B-002 analysis
+- Poll duration: 5 days
+- Friction formula for S-009 (future): median spread WHERE ny_session_bool=1,
+  plus buffer (p95-median of window spreads, floored 0.25 pts)
 """
 
 import os
@@ -14,6 +16,7 @@ import time
 import logging
 import sqlite3
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -30,15 +33,16 @@ logger = logging.getLogger("shadow_monitor")
 logging.getLogger("tradelocker").setLevel(logging.WARNING)
 from tradelocker import TLAPI
 
-# Instrument IDs (resolved from TradeLocker)
+# Instrument IDs (to be resolved)
 INSTRUMENT_IDS = {
-    "EURUSD": 25626,  # CRUC server
-    "NAS100": None,   # To be resolved
-    "US30": None,     # To be resolved
+    "EURUSD": 25626,
+    "NAS100": None,
+    "US30": None,
 }
 
 POLL_INTERVAL = 300  # 5 minutes
 DB_PATH = "database/trades.db"
+NY_TZ = ZoneInfo("America/New_York")
 
 
 def connect_tl():
@@ -57,12 +61,13 @@ def resolve_instrument_ids(tl):
         instruments = tl.get_all_instruments()
         for _, row in instruments.iterrows():
             name = str(row.get("name", "")).upper()
+            tradable_id = int(row["tradableInstrumentId"])
             if "NAS" in name or "NAS100" in name or "NASDAQ" in name:
-                INSTRUMENT_IDS["NAS100"] = int(row["tradableInstrumentId"])
-                logger.info(f"Resolved NAS100: {INSTRUMENT_IDS['NAS100']}")
+                INSTRUMENT_IDS["NAS100"] = tradable_id
+                logger.info(f"Resolved NAS100: {tradable_id}")
             if "US30" in name or "DOW" in name or "DJIA" in name:
-                INSTRUMENT_IDS["US30"] = int(row["tradableInstrumentId"])
-                logger.info(f"Resolved US30: {INSTRUMENT_IDS['US30']}")
+                INSTRUMENT_IDS["US30"] = tradable_id
+                logger.info(f"Resolved US30: {tradable_id}")
     except Exception as e:
         logger.error(f"Failed to resolve instrument IDs: {e}")
 
@@ -87,6 +92,15 @@ def ensure_spread_log_table():
     conn.close()
 
 
+def is_ny_session(ts_utc):
+    """Check if timestamp is in NY session (09:30-11:00 ET)."""
+    dt_ny = ts_utc.astimezone(NY_TZ)
+    hour = dt_ny.hour
+    minute = dt_ny.minute
+    et_minutes = hour * 60 + minute
+    return 9 * 60 + 30 <= et_minutes < 11 * 60
+
+
 def log_spread(instrument, ts_utc, bid, ask, spread_pts, ny_session):
     """Log a spread observation."""
     conn = sqlite3.connect(DB_PATH)
@@ -107,16 +121,9 @@ def log_spread(instrument, ts_utc, bid, ask, spread_pts, ny_session):
     conn.close()
 
 
-def is_ny_session(ts_utc):
-    """Check if timestamp falls in NY session (13:00-22:00 UTC)."""
-    hour = ts_utc.hour
-    return 13 <= hour < 22
-
-
 def get_spread(tl, instrument_id, instrument_name):
     """Get current bid/ask spread for an instrument."""
     try:
-        # Get price history to extract bid/ask
         history = tl.get_price_history(
             instrument_id=instrument_id,
             resolution="1M",
@@ -125,7 +132,6 @@ def get_spread(tl, instrument_id, instrument_name):
         if history.shape[0] == 0:
             return None
         last = history.iloc[-1]
-        # Dukascopy data: use open as proxy for bid, high-low as spread proxy
         bid = float(last["o"])
         ask = float(last["o"]) + 0.0001  # 1 pip spread proxy
         spread_pts = (ask - bid) / 0.0001
@@ -154,14 +160,12 @@ def run_spread_logger():
     ensure_spread_log_table()
     resolve_instrument_ids(tl)
 
-    # Log resolved IDs
     for name, id_val in INSTRUMENT_IDS.items():
         if id_val is not None:
             logger.info(f"  {name}: {id_val}")
         else:
             logger.warning(f"  {name}: NOT RESOLVED")
 
-    # 5-day collection window
     collection_end = datetime.utcnow() + timedelta(days=5)
     logger.info(f"Collection ends: {collection_end}")
 
