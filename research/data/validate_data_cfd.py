@@ -4,13 +4,66 @@ research/data/validate_data_cfd.py — Gate 1 validator for CFD instruments (NAS
 Uses zoneinfo for NY session detection with proper DST handling.
 Holiday-aware continuity checks.
 Bid-side note: CFD prices are inherently bid-side (no separate ask).
+
+HARD RULE: Any dataset with synthetic: true in factory/data_provenance.json
+is REJECTED for verdict runs (IS/OOS). Plumbing smoke tests are exempt
+but must be labeled.
 """
 
 import csv
+import json
+import os
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 NY_TZ = ZoneInfo("America/New_York")
+MANIFEST_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "factory", "data_provenance.json")
+
+
+def is_synthetic_dataset(dataset_path):
+    """Check if a dataset is marked as synthetic in the manifest."""
+    if not os.path.exists(MANIFEST_PATH):
+        return False  # No manifest = assume real (backward compat)
+    
+    with open(MANIFEST_PATH) as f:
+        manifest = json.load(f)
+    
+    datasets = manifest.get("datasets", {})
+    return datasets.get(dataset_path, {}).get("synthetic", False)
+
+
+def gate1_audit_cfd(dataset_path, instrument, resolution="5M"):
+    """
+    Gate 1 audit for CFD data.
+    
+    Returns: "PASS", "FLAG", or "REJECT"
+    """
+    # HARD RULE: Reject synthetic data for verdict runs
+    if is_synthetic_dataset(dataset_path):
+        return "REJECT", f"SYNTHETIC DATA REJECTED: {dataset_path} is marked synthetic in manifest"
+    
+    # Load and validate data
+    bars = []
+    with open(dataset_path, newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            bars.append({
+                "time": datetime.strptime(row["timestamp_utc"], "%Y-%m-%d %H:%M:%S"),
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+                "volume": float(row["volume"]),
+            })
+    
+    result = validate_cfd_data(bars, instrument, resolution)
+    
+    if result.get("fatal"):
+        return "REJECT", result["flags"]
+    elif result.get("flags"):
+        return "FLAG", result["flags"]
+    else:
+        return "PASS", []
 
 # US market holidays (2021-02-13..2025-05-13)
 US_HOLIDAYS_2021 = {
@@ -153,7 +206,16 @@ def validate_cfd_data(bars, instrument, resolution="5M"):
 
 
 def run_probe_report():
-    """Run probe report for NAS100 CFD data."""
+    """
+    Run probe report for NAS100 CFD data.
+
+    CLASSIFICATION: PLUMBING SMOKE — NOT data validation.
+    This tool probes data files for structural integrity (alignment, dupes,
+    gaps) but does NOT validate real-market fidelity. Synthetic data can
+    PASS this probe while being worthless for trading analysis.
+
+    For real data validation, use dukascopy ticks + holiday cross-reference.
+    """
     print("=" * 78)
     print("GATE 1 CFD PROBE — NAS100 DATA VALIDATION")
     print("=" * 78)

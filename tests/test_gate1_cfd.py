@@ -8,6 +8,7 @@ Tests:
 - Bid-side note validation
 - 5-min timestamp alignment
 - Data continuity checks
+- Synthetic data rejection (HARD RULE)
 
 All tests must pass before B-002 fires.
 """
@@ -22,6 +23,8 @@ from research.data.validate_data_cfd import (
     is_weekend,
     is_ny_session,
     is_market_closed,
+    is_synthetic_dataset,
+    gate1_audit_cfd,
     US_HOLIDAYS_2021,
     US_HOLIDAYS_2022,
     US_HOLIDAYS_2023,
@@ -188,6 +191,21 @@ def test_bid_side_note():
     print("  test_bid_side_note: PASS")
 
 
+def test_synthetic_data_rejection():
+    """HARD RULE: Synthetic data must be REJECTED for verdict runs."""
+    synthetic_path = "research/data/cfd_probe/nas100_5m_SYNTHETIC_PIPELINE_TEST_ONLY.csv"
+    
+    # Check manifest flags it as synthetic
+    assert is_synthetic_dataset(synthetic_path) == True, "Synthetic dataset should be flagged"
+    print("  test_synthetic_dataset_flagged: PASS")
+    
+    # Check gate1 rejects it
+    verdict, msg = gate1_audit_cfd(synthetic_path, "NAS100", "5M")
+    assert verdict == "REJECT", f"Gate 1 should reject synthetic data, got: {verdict}"
+    assert "SYNTHETIC" in msg, f"Rejection message should mention SYNTHETIC, got: {msg}"
+    print("  test_synthetic_data_rejection: PASS")
+
+
 def test_all():
     """Run all tests."""
     print("=" * 78)
@@ -203,6 +221,7 @@ def test_all():
         test_holiday_completeness,
         test_timestamp_alignment,
         test_bid_side_note,
+        test_synthetic_data_rejection,  # HARD RULE
     ]
     
     passed = 0
