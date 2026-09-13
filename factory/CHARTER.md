@@ -98,6 +98,22 @@ luck-expected / graveyard diff with hashes / verdict hash per kernel.
 concurrent slots) -> Real money (owner + verdict hash, always).
 H-001 occupies one paper slot already; H-003 takes one if it passes.
 
+H-001 SHADOW LANE ADDENDUM (Option B):
+The shadow data collector is DIVORCED from the ladder.
+It records live fills (timestamp, side, price, spread, slippage)
+in a SEPARATE table (shadow_fills) and is used ONLY for:
+  - Weekly heartbeats
+  - Spread monitoring
+  - Slippage analysis
+Fills from the shadow lane are EXCLUDED from:
+  - Ladder statistics (IS/OOS/Paper)
+  - Graveyard verdicts
+  - Luck ledger
+  - null_pass_rate
+The shadow lane has no gates. It collects whatever the live feed
+produces. The ladder runs on frozen historical data only.
+This separation is permanent and non-negotiable.
+
 THE LEASH (frozen; renegotiation is a breach):
 never edit criteria after results; never retest MECHANISM-DEAD
 without owner override + new evidence in writing; never delete/
