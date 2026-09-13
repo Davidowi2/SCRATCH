@@ -71,32 +71,42 @@ def compute_file_hash(path):
 
 
 def compute_metrics(trades):
-    """Compute performance metrics from trades."""
+    """Compute performance metrics from trades (FIX: uses gross_pips list)."""
     if not trades:
         return {"n": 0, "wins": 0, "win_rate": 0, "profit_factor": 0,
                 "expectancy_pips": 0, "max_dd_pips": 0, "exits": {}}
 
     wins = [t for t in trades if t.pips > 0]
-    gross_profit = sum(t.pips for t in wins)
-    gross_loss = -sum(t.pips for t in trades if t.pips <= 0)
-
+    
+    # FIX: Gross metrics derived from trade-level gross_pips list (before friction)
+    gross_pips_list = [t.gross_pips if t.gross_pips is not None else t.pips for t in trades]
+    gross_profit = sum(g for g in gross_pips_list if g > 0)
+    gross_loss = sum(abs(g) for g in gross_pips_list if g <= 0)
+    gross_pf = gross_profit / gross_loss if gross_loss > 0 else float("inf")
+    gross_expectancy = sum(gross_pips_list) / len(trades)
+    
+    # Net metrics (with friction)
+    net_expectancy = sum(t.pips for t in trades) / len(trades)
+    
     equity, peak, max_dd = 0.0, 0.0, 0.0
     for t in trades:
         equity += t.pips
         peak = max(peak, equity)
         max_dd = max(max_dd, peak - equity)
-
+    
     exits = {}
     for t in trades:
         exits[t.exit_reason] = exits.get(t.exit_reason, 0) + 1
-
+    
     return {
         "n": len(trades), "wins": len(wins),
         "win_rate": len(wins) / len(trades),
-        "gross_profit_pips": gross_profit, "gross_loss_pips": gross_loss,
-        "profit_factor": gross_profit / gross_loss if gross_loss > 0 else float("inf"),
-        "expectancy_pips": sum(t.pips for t in trades) / len(trades),
+        "profit_factor": gross_pf,  # FIX: gross PF for verdict
+        "expectancy_pips": net_expectancy,
         "max_dd_pips": max_dd, "exits": exits,
+        "gross_profit": gross_profit, "gross_loss": gross_loss,
+        "gross_pf": gross_pf, "gross_expectancy": gross_expectancy,
+        "net_expectancy": net_expectancy,
     }
 
 
