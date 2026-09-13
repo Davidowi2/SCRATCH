@@ -151,16 +151,18 @@ def run_backtest(bars, friction_override=None):
     position_open = False
     trade_today = False
     current_day = None
+    day_start_idx = 0
     
     i = 0
     while i < n:
         bar_time = bars[i]["time"]
         bar_date = bar_time.date()
         
-        # New day reset
+        # New day reset: track day_start_idx for B1
         if bar_date != current_day:
             current_day = bar_date
             trade_today = False
+            day_start_idx = i  # FIX B1: store index of first bar this day
         
         # Check existing position
         if position_open:
@@ -228,8 +230,8 @@ def run_backtest(bars, friction_override=None):
             i += 1
             continue
         
-        # Compute Asian range for this day
-        asian_range = compute_asian_range(bars, i)
+        # Compute Asian range for this day (FIX B1: pass day_start_idx)
+        asian_range = compute_asian_range(bars, day_start_idx)
         if asian_range is None:
             i += 1
             continue
@@ -238,8 +240,8 @@ def run_backtest(bars, friction_override=None):
         
         # Check if we're in trigger window (07:00-10:00 UTC)
         if bar_time.hour in TRIGGER_WINDOW_HOURS:
-            # Check M4: skip if range already closed beyond before window
-            if is_range_closed_before_window(bars, i, range_high, range_low):
+            # Check M4: skip if range already closed beyond before window (FIX B1)
+            if is_range_closed_before_window(bars, day_start_idx, range_high, range_low):
                 trade_today = True  # Mark as processed (skipped)
                 i += 1
                 continue
@@ -265,7 +267,7 @@ def run_backtest(bars, friction_override=None):
                                 trades.append(t)
                                 position_open = True
                                 trade_today = True
-                                i += 2
+                                i += 1  # FIX B3: entry bar gets full evaluation
                                 continue
                 
                 # Check SHORT signal
@@ -284,7 +286,7 @@ def run_backtest(bars, friction_override=None):
                                 trades.append(t)
                                 position_open = True
                                 trade_today = True
-                                i += 2
+                                i += 1  # FIX B3: entry bar gets full evaluation
                                 continue
         
         i += 1
@@ -313,19 +315,22 @@ def compute_metrics(trades):
                 "gross_expectancy": 0, "net_expectancy": 0}
     
     wins = [t for t in trades if t.pips > 0]
-    gross_profit = sum(t.pips for t in wins)
-    gross_loss = -sum(t.pips for t in trades if t.pips <= 0)
     
-    # Gross metrics (no friction)
+    # FIX B4: gross metrics from gross_pips list
     gross_pips_list = [t.gross_pips if t.gross_pips is not None else t.pips for t in trades]
     gross_profit_no_friction = sum(g for g in gross_pips_list if g > 0)
     gross_loss_no_friction = sum(abs(g) for g in gross_pips_list if g <= 0)
     gross_pf = gross_profit_no_friction / gross_loss_no_friction if gross_loss_no_friction > 0 else float("inf")
     gross_expectancy = sum(gross_pips_list) / len(trades)
     
+    # Net metrics (with friction)
+    net_profit = sum(t.pips for t in trades if t.pips > 0)
+    net_loss = -sum(t.pips for t in trades if t.pips <= 0)
+    net_pf = net_profit / net_loss if net_loss > 0 else float("inf")
+    
     equity, peak, max_dd = 0.0, 0.0, 0.0
     for t in trades:
-        equity += t.pips
+        equity += t.pips  # FIX B2: was t.pins
         peak = max(peak, equity)
         max_dd = max(max_dd, peak - equity)
     
@@ -338,10 +343,11 @@ def compute_metrics(trades):
     return {
         "n": len(trades), "wins": len(wins),
         "win_rate": len(wins) / len(trades),
-        "profit_factor": gross_profit / gross_loss if gross_loss > 0 else float("inf"),
+        "profit_factor": net_pf,  # FIX B4: net PF for verdict gate
         "expectancy_pips": net_expectancy,
         "max_dd_pips": max_dd, "exits": exits,
-        "gross_profit": gross_profit, "gross_loss": gross_loss,
+        "gross_profit": gross_profit_no_friction,
+        "gross_loss": gross_loss_no_friction,
         "gross_pf": gross_pf, "gross_expectancy": gross_expectancy,
         "net_expectancy": net_expectancy,
     }
