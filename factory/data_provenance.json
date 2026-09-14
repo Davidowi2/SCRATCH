@@ -19,14 +19,32 @@
     "research/data/gbpusd_1h.csv": {
       "source": "dukascopy_public",
       "generator": "tools/download_dukascopy.py",
-      "sha256": "bdb90fdbac07f025a1b3bb110033c86c6dece769d6db592159f10c168f629994",
+      "sha256": "bdb90fdbac07f025a1b3bb110033c86c6dece769d6db59215f9d10c168f62994",
       "synthetic": false,
       "description": "Dukascopy GBPUSD H1 cleaned dataset (27521 real bars, 2021-2025)",
       "created": "2026-09-08"
+    },
+    "research/data/crypto/btcusdt_5m.csv": {
+      "source": "binance_um_monthly_klines_zip",
+      "source_list": [
+        "PRIMARY (a): data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/5m/BTCUSDT-5m-YYYY-MM.zip for 2021-01..2025-05 (53 monthly zips, public, no API key)",
+        "FALLBACK (b): fapi.binance.com chunked klines with sleeps — NOT NEEDED, source (a) succeeded",
+        "FALLBACK (c): spot api.binance.com — NOT NEEDED (and wrong venue: spot != perp)"
+      ],
+      "generator": "tools/download_binance_btc.py",
+      "sha256": "db2b863b9f2cd57cfb3923933bc0b38060910a9277b2043afdbd698548310d4c",
+      "synthetic": false,
+      "instrument": "BTCUSDT USD-M PERPETUAL (futures klines, last-trade prices)",
+      "interval": "5m",
+      "rows": 459072,
+      "date_range": "2021-01-01 00:00:00 UTC .. 2025-05-13 23:55:00 UTC",
+      "created": "2026-09-14",
+      "intended_for": ["S-012", "B-003"]
     }
   },
   "rules": {
     "synthetic_rejection": "Any dataset with synthetic: true is REJECTED for verdict runs (IS/OOS). Plumbing smoke tests are exempt but must be labeled.",
-    "gate1_cfd_hard_rule": "Gate 1 CFD validator checks manifest and rejects synthetic data before any backtest execution."
+    "gate1_cfd_hard_rule": "Gate 1 CFD validator checks manifest and rejects synthetic data before any backtest execution.",
+    "gate1_crypto_hard_rule": "Gate 1 CRYPTO validator checks manifest and rejects synthetic data; 24/7 continuity applies (missing 5m bar = gap, no weekend/holiday exemption)."
   }
 }
