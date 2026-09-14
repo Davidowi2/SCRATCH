@@ -14,6 +14,12 @@ FROZEN GATES (applied mechanically, identical to B-001/B-002):
 
 Charter amendment: cool-off waived for SHA-locked preregistered kernels.
 No parameter changes. No double execution: kernel.run_backtest called once.
+
+LIFETIME COUNTING RULE (restated per Directive T v1, Overseer-signed):
+  lifetime total tested = RESOLVED graveyard rows, EXCLUDING rows whose
+  status is SMOKE-TEST or UNTESTED. Current epoch value: 23 post-B-003
+  (24 raw rows minus H-002-v1 pre-backtest tombstone, status=UNTESTED).
+  B-003 is CLOSED: S-012 died in IS, no OOS, no retest absent Owner override.
 """
 
 import csv
