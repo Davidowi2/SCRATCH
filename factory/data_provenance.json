@@ -40,6 +40,24 @@
       "date_range": "2021-01-01 00:00:00 UTC .. 2025-05-13 23:55:00 UTC",
       "created": "2026-09-14",
       "intended_for": ["S-012", "B-003"]
+    },
+    "research/data/crypto/btcusdt_5m_2020_smoke.csv": {
+      "source": "binance_um_monthly_klines_zip",
+      "source_list": [
+        "PRIMARY: data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/5m/BTCUSDT-5m-2020-MM.zip (12 monthly zips, public, no API key)"
+      ],
+      "generator": "tools/download_binance_btc_2020_smoke.py",
+      "sha256": "2a29c59050156ec896ed755184b33b6f3874436ee2a9d367d816a11d4e69d16c",
+      "synthetic": false,
+      "instrument": "BTCUSDT USD-M PERPETUAL (futures klines, last-trade prices)",
+      "interval": "5m",
+      "rows": 105408,
+      "date_range": "2020-01-01 00:00:00 UTC .. 2020-12-31 23:55:00 UTC",
+      "completeness": 1.0,
+      "created": "2026-09-14",
+      "intended_for": ["S-012 M2 audit-only smoke (2020 slice, OUTSIDE frozen windows)"],
+      "smoke_only": true,
+      "note": "REAL data (Binance UM klines start 2019-09-08). Consumes no one-shot; records no verdict. Frozen-window dataset (btcusdt_5m.csv) is untouched and its manifest hash remains immutable."
     }
   },
   "rules": {
