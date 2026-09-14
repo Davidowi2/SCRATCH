@@ -106,14 +106,26 @@ def atr14(highs, lows, closes, j):
 
 
 def sma_series(values, period):
+    """Rolling simple mean. Any window containing a None yields None
+    (running sum is reset at each None so None-poisoned values never leak
+    into later windows)."""
     n = len(values)
     out = [None] * n
     s = 0.0
+    run = 0
     for i, v in enumerate(values):
+        if v is None:
+            s = 0.0
+            run = 0
+            continue
         s += v
-        if i >= period:
-            s -= values[i - period]
-        if i >= period - 1:
+        run += 1
+        if run > period:
+            old = values[i - period]
+            if old is not None:
+                s -= old
+            run -= 1
+        if run == period:
             out[i] = s / period
     return out
 
