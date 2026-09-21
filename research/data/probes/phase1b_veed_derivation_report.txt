@@ -1,0 +1,87 @@
+{
+  "event": "VEED-v1.1-PARAMETER-DERIVATION",
+  "spec": "factory/preregistrations/VOLUME_EXTREME_EVENT_DETECTOR_v1.1.md",
+  "spec_sha256": "48001ab89610749aa766c835d2c1f0e529f79fe23baecb110e1ad87a3507e96c",
+  "data_file": "research/data/crypto/btcusdt_5m_tradecount_holdout_2019_2020.csv",
+  "data_sha256": "1ec3eb70a9a110c0d9412e70a8b027266a6eef13cd29486d86ab5266f8e8fbc7",
+  "holdout_window_requested": "2019-09-01..2020-12-31",
+  "holdout_window_effective": "2019-12-31..2020-12-31",
+  "holdout_note": "5m archive begins 2019-12-31 (single daily file); 2019-09..2019-12 does not exist at 5m granularity (S3-listed). Effective window = full available.",
+  "N_reference": 4032,
+  "eligible_candidate_bars": 101664,
+  "X_grid": [
+    {
+      "X": 0.005,
+      "pass_bars": 623,
+      "bars_per_day": 2.1632,
+      "inside_3_8": false
+    },
+    {
+      "X": 0.01,
+      "pass_bars": 1199,
+      "bars_per_day": 4.1632,
+      "inside_3_8": true
+    },
+    {
+      "X": 0.02,
+      "pass_bars": 2316,
+      "bars_per_day": 8.0417,
+      "inside_3_8": false
+    },
+    {
+      "X": 0.03,
+      "pass_bars": 3491,
+      "bars_per_day": 12.1215,
+      "inside_3_8": false
+    },
+    {
+      "X": 0.05,
+      "pass_bars": 5694,
+      "bars_per_day": 19.7708,
+      "inside_3_8": false
+    }
+  ],
+  "Y_grid": [
+    {
+      "Y": 0.1,
+      "combined": 174,
+      "sell_side": 73,
+      "buy_side": 101,
+      "inside_250_750": false
+    },
+    {
+      "Y": 0.15,
+      "combined": 270,
+      "sell_side": 109,
+      "buy_side": 161,
+      "inside_250_750": true
+    },
+    {
+      "Y": 0.2,
+      "combined": 374,
+      "sell_side": 164,
+      "buy_side": 210,
+      "inside_250_750": true
+    },
+    {
+      "Y": 0.25,
+      "combined": 495,
+      "sell_side": 214,
+      "buy_side": 281,
+      "inside_250_750": true
+    },
+    {
+      "Y": 0.33,
+      "combined": 705,
+      "sell_side": 319,
+      "buy_side": 386,
+      "inside_250_750": true
+    }
+  ],
+  "chosen_X": 0.01,
+  "chosen_Y": 0.25,
+  "achieved_outlier_bars_per_day": 4.1632,
+  "achieved_combined_candidates": 495,
+  "budget_note": "calibration only \u2014 consumes NO batch/luck budget",
+  "run_utc": "2026-09-21T13:46:55.927620+00:00"
+}

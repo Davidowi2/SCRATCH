@@ -28,8 +28,8 @@
       "source": "binance_um_monthly_klines_zip",
       "source_list": [
         "PRIMARY (a): data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/5m/BTCUSDT-5m-YYYY-MM.zip for 2021-01..2025-05 (53 monthly zips, public, no API key)",
-        "FALLBACK (b): fapi.binance.com chunked klines with sleeps — NOT NEEDED, source (a) succeeded",
-        "FALLBACK (c): spot api.binance.com — NOT NEEDED (and wrong venue: spot != perp)"
+        "FALLBACK (b): fapi.binance.com chunked klines with sleeps \u2014 NOT NEEDED, source (a) succeeded",
+        "FALLBACK (c): spot api.binance.com \u2014 NOT NEEDED (and wrong venue: spot != perp)"
       ],
       "generator": "tools/download_binance_btc.py",
       "sha256": "db2b863b9f2cd57cfb3923933bc0b38060910a9277b2043afdbd698548310d4c",
@@ -39,7 +39,10 @@
       "rows": 459072,
       "date_range": "2021-01-01 00:00:00 UTC .. 2025-05-13 23:55:00 UTC",
       "created": "2026-09-14",
-      "intended_for": ["S-012", "B-003"]
+      "intended_for": [
+        "S-012",
+        "B-003"
+      ]
     },
     "research/data/crypto/btcusdt_5m_2020_smoke.csv": {
       "source": "binance_um_monthly_klines_zip",
@@ -55,9 +58,33 @@
       "date_range": "2020-01-01 00:00:00 UTC .. 2020-12-31 23:55:00 UTC",
       "completeness": 1.0,
       "created": "2026-09-14",
-      "intended_for": ["S-012 M2 audit-only smoke (2020 slice, OUTSIDE frozen windows)"],
+      "intended_for": [
+        "S-012 M2 audit-only smoke (2020 slice, OUTSIDE frozen windows)"
+      ],
       "smoke_only": true,
       "note": "REAL data (Binance UM klines start 2019-09-08). Consumes no one-shot; records no verdict. Frozen-window dataset (btcusdt_5m.csv) is untouched and its manifest hash remains immutable."
+    },
+    "research/data/crypto/btcusdt_5m_tradecount_holdout_2019_2020.csv": {
+      "source": "binance_um_monthly_plus_daily_klines_zip",
+      "source_list": [
+        "PRIMARY: data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/5m/BTCUSDT-5m-2020-MM.zip (12 monthly zips, 2020-01..2020-12)",
+        "PLUS: data.binance.vision/data/futures/um/daily/klines/BTCUSDT/5m/BTCUSDT-5m-2019-12-31.zip (single daily file \u2014 earliest 5m kline in the archive; S3-listed)",
+        "2019-09..2019-12 monthly/daily 5m files DO NOT EXIST (probed 404; S3 listing confirms 2019-12-31 is the first key)"
+      ],
+      "generator": "tools/download_btc_tradecount_holdout.py (+2019-12-31 daily merge)",
+      "sha256": "1ec3eb70a9a110c0d9412e70a8b027266a6eef13cd29486d86ab5266f8e8fbc7",
+      "synthetic": false,
+      "instrument": "BTCUSDT USD-M PERPETUAL (futures klines, last-trade prices)",
+      "interval": "5m",
+      "columns": "timestamp_utc,open,high,low,close,volume,trades (trades = Binance col[8], trade count)",
+      "rows": 105696,
+      "date_range": "2019-12-31 00:00:00 UTC .. 2020-12-31 23:55:00 UTC",
+      "created": "2026-09-21",
+      "intended_for": [
+        "VEED v1.1 Phase 1B parameter derivation (RETIRED holdout)"
+      ],
+      "retired": true,
+      "note": "HOLDOUT RETIRED per spec \u00a74 after the 1B derivation: never reused for isolation testing, OOS, or Paper. March 2020 crash included; no outlier stripping."
     }
   },
   "rules": {
