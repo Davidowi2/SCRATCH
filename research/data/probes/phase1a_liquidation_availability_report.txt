@@ -1,0 +1,16 @@
+PHASE 1A — LIQUIDATION DATA AVAILABILITY PROBE REPORT
+run_utc: 2026-09-21T12:26:19.023718+00:00
+window: 2019-09-01..2025-05-13
+source: data.binance.vision liquidationSnapshot (Binance official), UM futures, BTCUSDT
+monthly files: 0/69 available
+daily files: 0/2082 available
+union coverage: 0/2082 = 0.00%
+first covered: None  last covered: None
+max gap: 2082 day(s) from 2019-09-01
+granularity: event-level ms timestamps, bar-alignable to <=5m buckets: False
+allForceOrders REST: HTTP 404
+coinalyze: error: HTTPSConnectionPool(host='api.coinalyze.com', port=443): Max retries exceeded with url: /api/1/futures-markets?exchange=BINANCE_F (Caused by SSLError(SSLError(1, '[SSL: TLSV1_UNRECOGNIZED_NAME] tlsv1 unrecognized name (_ssl.c:1000)')))
+kline trade-count column (fallback): True
+samples: {}
+VERDICT: FAIL
+CAVEATS: (1) Binance forceOrder feeds are 1-order/1000ms snapshot streams; archive consistent with that feed -> cascade undercount risk (data-quality caveat for Phase 1B, not availability). (2) BTCUSDT perp inception 2019-09-08; pre-inception = market absence.
