@@ -85,6 +85,44 @@
       ],
       "retired": true,
       "note": "HOLDOUT RETIRED per spec \u00a74 after the 1B derivation: never reused for isolation testing, OOS, or Paper. March 2020 crash included; no outlier stripping."
+    },
+    "research/data/crypto/btcusdt_5m_tradecount_is_2021_2023.csv": {
+      "source": "binance_um_monthly_klines_zip",
+      "source_list": [
+        "PRIMARY: data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/5m/BTCUSDT-5m-2021-MM.zip through 2023-MM.zip (36 monthly zips, public, no API key)"
+      ],
+      "generator": "tools/download_btc_5m_tradecount_live.py",
+      "sha256": "63b02ddd852937aba35d3aae78388215b07b7ff20c18c945677a86e607639d5a",
+      "synthetic": false,
+      "instrument": "BTCUSDT USD-M PERPETUAL (futures klines, last-trade prices)",
+      "interval": "5m",
+      "columns": "timestamp_utc,open,high,low,close,volume,trades (trades = Binance col[8], trade count)",
+      "rows": 315360,
+      "date_range": "2021-01-01 00:00:00 UTC .. 2023-12-31 23:55:00 UTC",
+      "created": "2026-09-21",
+      "intended_for": [
+        "VEED v1.1 Phase 2 Isolation Protocol (IS window)"
+      ],
+      "gate1_valid": "PASS (tools/gate1_validate_tradecount.py)"
+    },
+    "research/data/crypto/btcusdt_5m_tradecount_oos_2024_2025.csv": {
+      "source": "binance_um_monthly_klines_zip",
+      "source_list": [
+        "PRIMARY: data.binance.vision/data/futures/um/monthly/klines/BTCUSDT/5m/BTCUSDT-5m-2024-MM.zip through 2025-05.zip (17 monthly zips, public, no API key); OOS file trimmed to 2025-05-13"
+      ],
+      "generator": "tools/download_btc_5m_tradecount_live.py",
+      "sha256": "862e9eef1941394235601679710b1174936b1630f1a8ccae42a9c8a5e99aa7d6",
+      "synthetic": false,
+      "instrument": "BTCUSDT USD-M PERPETUAL (futures klines, last-trade prices)",
+      "interval": "5m",
+      "columns": "timestamp_utc,open,high,low,close,volume,trades (trades = Binance col[8], trade count)",
+      "rows": 143712,
+      "date_range": "2024-01-01 00:00:00 UTC .. 2025-05-13 23:55:00 UTC",
+      "created": "2026-09-21",
+      "intended_for": [
+        "VEED v1.1 Phase 2 Isolation Protocol (OOS window)"
+      ],
+      "gate1_valid": "PASS (tools/gate1_validate_tradecount.py)"
     }
   },
   "rules": {
