@@ -29,21 +29,19 @@ EXPERIMENT_ID = "S-014"
 STRATEGY_FAMILY = "FRMR"
 PARAM_DESC = "Funding Rate Mean Reversion: fade F>=+0.05% (SHORT) and F<=-0.05% (LONG), fixed 8h horizon"
 
-FUNDING_THRESHOLD = 0.0005  # 0.05%
+THRESHOLD = 0.0005  # 0.05%
 TAKER_FEE = 0.0005  # per leg (0.05%)
-FUNDING_RATE_COL = 1  # index in funding CSV
+HORIZON_HOURS = 8
 
 
 class Trade:
-    def __init__(self, entry_time, exit_time_target, side, entry_price, estimated_exit_price, entry_funding_rate):
+    def __init__(self, entry_time, exit_time_target, side, entry_price, exit_price, funding_rate):
         self.entry_time = entry_time
         self.exit_time_target = exit_time_target
         self.side = side
         self.entry_price = entry_price
-        self.exit_price = estimated_exit_price
-        self.entry_funding_rate = entry_funding_rate
-        self.actual_exit_price = None
-        self.actual_exit_time = None
+        self.exit_price = exit_price
+        self.funding_rate = funding_rate
         self.price_only = 0.0
         self.funding_credit = 0.0
         self.fees = 0.0
@@ -55,7 +53,7 @@ def load_funding(path):
     rows = []
     with open(path, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
-            ts = datetime.strptime(row["timestamp_utc"], "%Y-%m-%d %H:%M:%S")
+            ts = datetime.strptime(row["timestamp_utc"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
             rate = float(row["funding_rate"])
             rows.append({"time": ts, "rate": rate})
     rows.sort(key=lambda r: r["time"])
@@ -66,7 +64,7 @@ def load_prices(path):
     rows = []
     with open(path, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
-            ts = datetime.strptime(row["timestamp_utc"], "%Y-%m-%d %H:%M:%S")
+            ts = datetime.strptime(row["timestamp_utc"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
             rows.append({
                 "time": ts,
                 "open": float(row["open"]),
@@ -91,31 +89,22 @@ def run_backtest(funding, prices, start, end):
     position_open = False
     current_exit_time = None
 
-    # Build settlement times
-    settlements = []
     for f in funding:
         ft = f["time"]
         fr = f["rate"]
-        if start <= ft <= end:
-            settlements.append({"time": ft, "rate": fr})
 
-    for s in settlements:
-        ft = s["time"]
-        fr = s["rate"]
+        if ft < start or ft > end:
+            continue
 
-        # If we're in a position, check if this settlement is the exit
+        # If in position, check if this settlement is the exit
         if position_open and current_exit_time and ft >= current_exit_time:
-            # Exit the position
             if trades:
                 t = trades[-1]
                 exit_price, exit_time = get_price_at_or_after(prices, t.exit_time_target)
                 if exit_price is not None:
-                    t.actual_exit_price = exit_price
-                    t.actual_exit_time = exit_time
-                    # Funding credit uses the rate at exit settlement
-                    exit_funding_rate = s["rate"]  # rate at exit boundary
-                    t.funding_credit = exit_funding_rate * t.entry_price
-                    # Recalculate net with exit funding rate
+                    t.exit_price = exit_price
+                    # Funding credit uses the rate at the EXIT settlement
+                    t.funding_credit = fr * t.entry_price
                     if t.side == "SHORT":
                         t.price_only = t.entry_price - exit_price
                     else:
@@ -127,31 +116,26 @@ def run_backtest(funding, prices, start, end):
 
         # If not in position, check for trigger
         if not position_open:
-            if fr >= FUNDING_THRESHOLD:
+            if fr >= THRESHOLD:
                 side = "SHORT"
-            elif fr <= -FUNDING_THRESHOLD:
+            elif fr <= -THRESHOLD:
                 side = "LONG"
             else:
                 continue
 
-            # Entry: first 5m bar at or after settlement
             entry_price, entry_time = get_price_at_or_after(prices, ft)
             if entry_price is None:
                 continue
 
-            # Exit: 8h later
-            exit_time_target = ft + timedelta(hours=8)
+            exit_time_target = ft + timedelta(hours=HORIZON_HOURS)
             exit_price, _ = get_price_at_or_after(prices, exit_time_target)
             if exit_price is None:
                 continue
 
             t = Trade(entry_time, exit_time_target, side, entry_price, exit_price, fr)
-            t.exit_time_target = exit_time_target
-            t.actual_exit_price = None
-            t.actual_exit_time = None
-            # Initial funding estimate (at entry settlement)
-            t.funding_credit = fr * entry_price
             t.fees = 2 * TAKER_FEE * entry_price
+            # Initial estimate (will be updated at exit with actual funding rate)
+            t.funding_credit = fr * entry_price
             if side == "SHORT":
                 t.price_only = entry_price - exit_price
             else:
@@ -183,13 +167,16 @@ def compute_metrics(trades, key="net"):
     loss = -sum(p for p in pnls if p <= 0)
     pf = profit / loss if loss > 0 else float("inf")
 
+    returns = [p / t.entry_price for p, t in zip(pnls, trades)]
+    avg_ret = sum(returns) / len(returns)
+
     return {
         "n": len(trades),
         "wins": len(wins),
         "win_rate": len(wins) / len(trades),
         "profit_factor": pf,
         "expectancy": sum(pnls) / len(trades),
-        "avg_ret": sum(t.ret for t in trades) / len(trades),
+        "avg_ret": avg_ret,
     }
 
 
@@ -226,7 +213,6 @@ def main():
     parser.add_argument("--phase", choices=["insample", "oos"], default="insample")
     args = parser.parse_args()
 
-    # Gate 1 on prices
     rep = gate1_audit_crypto(args.prices, verbose=False)
     if rep["verdict"] == "REJECT":
         print("Gate 1 CRYPTO REJECT: price data failed validation")
@@ -249,10 +235,10 @@ def main():
     long_trades = [t for t in trades if t.side == "LONG"]
 
     print(f"\n{'='*72}")
-    print(f"S-014 FRMR — {args.phase.upper()} (2021-2023)" if args.phase == "insample" else f"S-014 FRMR — {args.phase.upper()}")
+    print(f"S-014 FRMR — {args.phase.upper()}")
     print(f"{'='*72}")
     print(f"Total trades: {len(trades)} (SHORT: {len(short_trades)}, LONG: {len(long_trades)})")
-    print(f"Threshold: ±{FUNDING_THRESHOLD*100}%  |  Taker fee: {TAKER_FEE*100}%/leg  |  Horizon: 8h")
+    print(f"Threshold: ±{THRESHOLD*100}%  |  Taker fee: {TAKER_FEE*100}%/leg  |  Horizon: {HORIZON_HOURS}h")
 
     # Three decompositions
     print(f"\n{'='*72}")
@@ -270,26 +256,34 @@ def main():
             print(f"{label:<12} | {m['n']:>4} | {m['win_rate']:>6.1%} | {pf_str:>8} | {m['expectancy']:>+10.2f} | {m['avg_ret']*100:>+7.3f}%")
         print()
 
-    # Short arm verdict (primary)
+    # Short arm verdict
     print(f"\n{'='*72}")
-    print(f"SHORT ARM VERDICT (primary test, F >= +0.05%)")
+    print(f"SHORT ARM VERDICT (primary test, F >= +{THRESHOLD*100}%)")
     print(f"{'='*72}")
     sm = compute_metrics(short_trades, "net")
     verdict, note = decide(sm)
-    cause = classify_cause(sm)
+    cause = classify_cause({
+        "gross_pf": compute_metrics(short_trades, "price_plus_funding")["profit_factor"],
+        "gross_wr": compute_metrics(short_trades, "price_plus_funding")["win_rate"],
+        "gross_exp": compute_metrics(short_trades, "price_plus_funding")["expectancy"],
+    })
     print(f"n={sm['n']}  WR={sm['win_rate']:.2%}  net PF={sm['profit_factor']:.4f}")
     print(f"price_only PF={compute_metrics(short_trades, 'price_only')['profit_factor']:.4f}")
     print(f"price+fund PF={compute_metrics(short_trades, 'price_plus_funding')['profit_factor']:.4f}")
     print(f"VERDICT: {verdict} — {note}")
     print(f"Autopsy: {cause}")
 
-    # Long arm (pre-flagged INSUFFICIENT)
+    # Long arm
     print(f"\n{'='*72}")
-    print(f"LONG ARM (pre-flagged INSUFFICIENT, F <= -0.05%)")
+    print(f"LONG ARM (pre-flagged INSUFFICIENT, F <= -{THRESHOLD*100}%)")
     print(f"{'='*72}")
     lm = compute_metrics(long_trades, "net")
     long_verdict, long_note = decide(lm)
-    long_cause = classify_cause(lm)
+    long_cause = classify_cause({
+        "gross_pf": compute_metrics(long_trades, "price_plus_funding")["profit_factor"],
+        "gross_wr": compute_metrics(long_trades, "price_plus_funding")["win_rate"],
+        "gross_exp": compute_metrics(long_trades, "price_plus_funding")["expectancy"],
+    })
     print(f"n={lm['n']}  WR={lm['win_rate']:.2%}  net PF={lm['profit_factor']:.4f}")
     print(f"VERDICT: {long_verdict} — {long_note}")
     print(f"Autopsy: {long_cause}")
@@ -300,7 +294,7 @@ def main():
         "phase": args.phase,
         "short_n": sm['n'],
         "short_net_pf": sm['profit_factor'],
-        "short_gross_pf": compute_metrics(short_trades, 'price_plus_funding')['profit_factor'],
+        "short_gross_pf": compute_metrics(short_trades, "price_plus_funding")["profit_factor"],
         "long_n": lm['n'],
         "long_net_pf": lm['profit_factor'],
         "verdict": verdict,
