@@ -123,6 +123,25 @@
         "VEED v1.1 Phase 2 Isolation Protocol (OOS window)"
       ],
       "gate1_valid": "PASS (tools/gate1_validate_tradecount.py)"
+    },
+    "research/data/crypto/btcusdt_fundingrate_8h.csv": {
+      "source": "binance_um_monthly_fundingrate_zip",
+      "source_list": [
+        "PRIMARY: data.binance.vision/data/futures/um/monthly/fundingRate/BTCUSDT/BTCUSDT-fundingRate-2020-MM.zip through 2025-05.zip (65 monthly zips)"
+      ],
+      "generator": "tools/download_btc_fundingrate.py",
+      "sha256": "a6e42ffb4fa6f5ea046b9f28890869f69244d1a9607a992927e0854e83f9c436",
+      "synthetic": false,
+      "instrument": "BTCUSDT USD-M PERPETUAL (funding rate, 8h settlement)",
+      "interval": "8h (00:00, 08:00, 16:00 UTC)",
+      "columns": "timestamp_utc,funding_rate (decimal),settlement_hour_utc",
+      "rows": 5880,
+      "date_range": "2020-01-01 00:00:00 UTC .. 2025-05-13 16:00:00 UTC",
+      "created": "2026-09-22",
+      "intended_for": [
+        "FRMR v1.0 Phase 3A data distribution report"
+      ],
+      "gate1_valid": "PASS (tools/gate1_validate_fundingrate.py)"
     }
   },
   "rules": {
