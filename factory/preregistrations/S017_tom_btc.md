@@ -53,12 +53,12 @@ funding_credit = -sum(funding_rates_during_hold) * entry_price
 
 - n >= 50
 - net PF >= 1.0
-- bootstrap 90% CI lower bound on mean return >= 1.0
+- bootstrap 90% CI lower bound on MEAN RETURN > 0 (CI must exclude zero)
 - mean net return > 0
 
 VERDICT:
 - SURVIVE: all survive criteria pass
-- INCONCLUSIVE: PF >= 1.0 but CI lower < 1.0 (small sample, no verdict)
+- INCONCLUSIVE: PF >= 1.0 but CI lower <= 0 (small sample, no verdict)
 - KILL: PF < 1.0 or mean <= 0
 
 ## GATES
