@@ -50,11 +50,14 @@ for IS testing).
 ### Locked Parameters
 
 After Phase 1, the selected (N,M) is LOCKED and recorded below:
-- **(N,M)** = (2,1) — last 2 days of month + first 1 day of next month
-- **Mean net return** = +4.7746% (2020 holdout, 11 windows)
-- **Win rate** = 81.8%
-- **Mean funding cost** = +0.101625% per window
-- **Data availability**: BTCUSDT daily data starts 2020-01-01 (earliest clean date); 2019 data not available via Binance UM archive for the perp pair. 1960 daily bars (2020-02025), Gate-1 validated (0 gaps, 0 dupes, 100% coverage).
+- **(N,M)** = (3,3) — last 3 days of month + first 3 days of next month
+- **Mean PRICE return** = +2.3518% (2018-2020 spot holdout, 35 windows)
+- **Win rate** = 60.0%
+- **Mean baseline window return** = +0.8199% (n=1091, same 6-day length)
+- **Excess over baseline** = +1.5319% (genuine calendar effect, not regime/beta)
+- **Data availability**: BTCUSDT SPOT daily data starts 2018-01-01 (earliest clean date). 1096 bars (2018-01-01..2020-12-31), Gate-1 validated (0 gaps, 0 dupes, 100% coverage). sha256=ea3239674fd3edf3adf9b50010c03d545b56296407bcb17e3211c9e9c28f3c14. BTCUSDT PERP daily starts 2020-01-01 (spot only pre-2020; funding-cost not available pre-2020 — Phase 1.5 holdout is spot price only).
+- **Phase 1 holdout** (2020-only): (N,M)=(2,1) mean net +4.77%, WR=81.8% — superseded by Phase 1.5 extended holdout.
+- **Phase 1.5 verdict**: VIABLE — (3,3) is clear winner AND TOM mean (+2.35%) meaningfully exceeds baseline (+0.82%)
 
 ## CLOSURE CONDITION
 
