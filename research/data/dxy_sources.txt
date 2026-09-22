@@ -1,0 +1,3 @@
+https://fred.stlouisfed.org/series/DTWEXBGS
+https://fred.stlouisfed.org/series/DTWEXB
+https://fred.stlouisfed.org/series/DTWEXBMDL
