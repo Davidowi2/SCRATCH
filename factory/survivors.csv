@@ -1,0 +1,2 @@
+id,name,phase,is_n,is_mean,oos_n,oos_mean,combined_n,combined_mean,combined_sharpe,combined_pf,combined_dd,combined_excess,ci90_low,ci90_high,verdict_hash,date
+S-024,S024_tom_spy,IS+OOS,59,0.004472,52,0.003054,111,0.003808,0.5917,1.5852,-0.146782,0.001067,0.000331,0.007235,7d31dcccc339389ec0a23395209fe67ee87fe387e33c64df6954561c9216207d,2026-09-22
