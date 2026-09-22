@@ -50,6 +50,7 @@ def validate(path, label):
     misaligned = 0
     dupes = 0
     zero_trades = 0
+    zero_trade_timestamps = []
     prev = None
     seen = set()
 
@@ -64,6 +65,7 @@ def validate(path, label):
             trades.append(tr)
             if tr == 0:
                 zero_trades += 1
+                zero_trade_timestamps.append(row[0])
         # alignment
         if t.minute % 5 != 0 or t.second != 0:
             misaligned += 1
@@ -95,6 +97,10 @@ def validate(path, label):
         std_tr = (sum((t - mean_tr) ** 2 for t in trades) / len(trades)) ** 0.5
         print(f"trades stats: mean={mean_tr:.1f} std={std_tr:.1f} "
               f"min={min(trades)} max={max(trades)} zero-count={zero_trades}")
+        if zero_trade_timestamps:
+            print(f"\nzero-trade timestamps ({len(zero_trade_timestamps)}):")
+            for ts in zero_trade_timestamps:
+                print(f"  {ts}")
 
     verdict = ("PASS" if has_trades and bad_ohlc == 0 and misaligned == 0
                and dupes == 0 and completeness >= 0.9999

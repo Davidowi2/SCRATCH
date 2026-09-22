@@ -6,38 +6,38 @@
   "data_sha256": "1ec3eb70a9a110c0d9412e70a8b027266a6eef13cd29486d86ab5266f8e8fbc7",
   "holdout_window_requested": "2019-09-01..2020-12-31",
   "holdout_window_effective": "2019-12-31..2020-12-31",
-  "holdout_note": "5m archive begins 2019-12-31 (single daily file); 2019-09..2019-12 does not exist at 5m granularity (S3-listed). Effective window = full available.",
+  "holdout_note": "5m archive begins 2019-12-31; 2019-09..12 not available at 5m. Effective window = full available.",
   "N_reference": 4032,
   "eligible_candidate_bars": 101664,
   "X_grid": [
     {
       "X": 0.005,
       "pass_bars": 623,
-      "bars_per_day": 2.1632,
+      "bars_per_day": 1.7022,
       "inside_3_8": false
     },
     {
       "X": 0.01,
       "pass_bars": 1199,
-      "bars_per_day": 4.1632,
+      "bars_per_day": 3.276,
       "inside_3_8": true
     },
     {
       "X": 0.02,
       "pass_bars": 2316,
-      "bars_per_day": 8.0417,
-      "inside_3_8": false
+      "bars_per_day": 6.3279,
+      "inside_3_8": true
     },
     {
       "X": 0.03,
       "pass_bars": 3491,
-      "bars_per_day": 12.1215,
+      "bars_per_day": 9.5383,
       "inside_3_8": false
     },
     {
       "X": 0.05,
       "pass_bars": 5694,
-      "bars_per_day": 19.7708,
+      "bars_per_day": 15.5574,
       "inside_3_8": false
     }
   ],
@@ -80,8 +80,9 @@
   ],
   "chosen_X": 0.01,
   "chosen_Y": 0.25,
-  "achieved_outlier_bars_per_day": 4.1632,
+  "achieved_outlier_bars_per_day": 3.276,
   "achieved_combined_candidates": 495,
+  "denominator_correction_note": "corrected from BARS_PER_DAY=288 to n_holdout_days=366 per Ruling 1; X=1% re-logged 3.28 bars/day (was 4.16); X and Y unchanged per directive; both 1% and 2% fall inside 3-8 with corrected denominator but 1% stays locked",
   "budget_note": "calibration only \u2014 consumes NO batch/luck budget",
-  "run_utc": "2026-09-21T13:46:55.927620+00:00"
+  "run_utc": "2026-09-22T10:46:05.567100+00:00"
 }

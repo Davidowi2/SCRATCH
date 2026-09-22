@@ -115,10 +115,11 @@ def main():
     print("\nSTEP 1 — X GRID (Rule 1 qualifying-bar rate)")
     print(f"{'X':>6} | {'pass bars':>10} | {'bars/day':>9} | in 3-8/day")
     print("-" * 46)
+    n_holdout_days = max(1, (bars[-1][0] - bars[0][0]).days + 1)
     x_rows = []
     for x in X_GRID:
         cnt = int(passers[x].sum())
-        per_day = cnt / BARS_PER_DAY
+        per_day = cnt / n_holdout_days
         inside = TARGET_X_LO <= per_day <= TARGET_X_HI
         x_rows.append((x, cnt, per_day, inside))
         print(f"{x*100:>5}% | {cnt:>10} | {per_day:>9.2f} | {'YES' if inside else 'no'}")
